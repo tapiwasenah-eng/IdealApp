@@ -1,0 +1,31 @@
+User-agent: *
+Allow: /
+
+Disallow: /dashboard
+Disallow: /dashboard/
+Disallow: /editor
+Disallow: /editor/
+Disallow: /admin
+Disallow: /admin/
+Disallow: /settings
+Disallow: /settings/
+Disallow: /auth
+Disallow: /auth/
+Disallow: /api/
+Disallow: /_vite/
+
+# Block known bad bots
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
+
+# Allow GPTBot (optional — for AI training)
+User-agent: GPTBot
+Allow: /blog
+Allow: /tutorials
+Allow: /docs
+Disallow: /
+
+Sitemap: https://idealapp.technology/sitemap.xml
