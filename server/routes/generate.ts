@@ -24,9 +24,51 @@ const aiRateLimiter = rateLimit({
 
 // Credits / Quota Middleware
 async function enforceCredits(req: express.Request, res: express.Response, next: express.NextFunction) {
-  // Bypassed: firebase-admin service account is not injected by default in AI Studio.
-  // In a production environment, this would hit the db to verify credits via firebase-admin.
-  next();
+  try {
+    const uid = req.headers['x-user-uid'] as string;
+    if (!uid) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: missing user uid hook' });
+    }
+    
+    // Skip if service accounts/dev overrides exist, but enforce for normal users
+    if (process.env.SKIP_CREDIT_CHECK === 'true') {
+      return next();
+    }
+
+    const db = getDb();
+    const userRef = db.collection('users').doc(uid);
+
+    await db.runTransaction(async (t) => {
+      const doc = await t.get(userRef);
+      if (!doc.exists) {
+        throw new Error('User record not found');
+      }
+
+      const data = doc.data();
+      const credits = data?.credits || 0;
+      const isPro = data?.subscriptionStatus === 'ACTIVE';
+
+      // Always allow if Pro, otherwise enforce credit limit
+      if (!isPro && credits <= 0) {
+        return res.status(402).json({ 
+          success: false, 
+          error: 'Insufficient credits. Please upgrade your plan to continue generating documents.' 
+        });
+      }
+
+      // Decrement credit if not pro
+      if (!isPro) {
+        t.update(userRef, { credits: credits - 1 });
+      }
+    });
+
+    next();
+  } catch (error: any) {
+    console.error('Credit enforcement failed:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: error.message || 'Failed to verify credits' });
+    }
+  }
 }
 
 // ═══ DOCUMENT SCHEMA (shared by both models) ═══
