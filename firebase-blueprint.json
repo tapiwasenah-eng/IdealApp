@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "plan": { "type": "string", "enum": ["free", "pro", "enterprise"] },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "aiRequestsToday": { "type": "number" },
+        "lastAiRequestDate": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "plan", "createdAt"]
+    },
+    "Document": {
+      "title": "Document",
+      "description": "A workspace document with canvas data",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "canvasData": { "type": "string" },
+        "status": { "type": "string", "enum": ["In Progress", "Completed", "Review"] },
+        "lastModified": { "type": "string", "format": "date-time" },
+        "type": { "type": "string" }
+      },
+      "required": ["userId", "title", "canvasData", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/documents/{docId}": {
+      "schema": "Document",
+      "description": "Workspace documents"
+    }
+  }
+}

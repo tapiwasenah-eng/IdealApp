@@ -1,8 +1,5 @@
 {
-    "name": "Hello World",
-    "description": "A basic Hello World application.",
-    "requestFramePermissions": [],
-    "majorCapabilities": [
-        "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-    ]
+  "name": "Ideal App",
+  "description": "Ideal App is an AI-powered document and venture builder for professional business documents.",
+  "requestFramePermissions": []
 }

@@ -1,0 +1,286 @@
+/* src/index.css */
+@import "tailwindcss";
+
+@layer base {
+  html, body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+}
+
+@layer utilities {
+  .pb-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .min-h-safe {
+    min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}
+
+@theme {
+  --color-brand-blue: #3B82F6;
+  --color-brand-purple: #8B5CF6;
+  --color-brand-teal: #0D9488;
+  --color-brand-orange: #F59E0B;
+  --color-brand-green: #10B981;
+  --color-brand-pink: #EC4899;
+
+  --color-surface-bg: #F8FAFC;
+  --color-surface-card: #FFFFFF;
+  --color-surface-subtle: #F1F5F9;
+
+  --color-text-primary: #111827;
+  --color-text-muted: #6B7280;
+  --color-text-faint: #9CA3AF;
+
+  --color-border: #E5E7EB;
+
+  --shadow-card: 0 1px 3px 0 rgba(0,0,0,0.07), 0 1px 2px -1px rgba(0,0,0,0.05);
+  --shadow-card-hover: 0 10px 25px -5px rgba(0,0,0,0.10), 0 4px 10px -5px rgba(0,0,0,0.06);
+  --shadow-modal: 0 20px 60px -10px rgba(0,0,0,0.20), 0 8px 20px -8px rgba(0,0,0,0.12);
+
+  --animate-fadeIn: fadeIn 0.25s ease-out both;
+  --animate-shimmer: shimmer 0.5s linear infinite;
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes shimmer {
+    0%   { background-position: -600px 0; }
+    100% { background-position:  600px 0; }
+  }
+}
+
+/* ── CSS variables ─────────────────────────────────────────── */
+:root {
+  /* Canvas */
+  --canvas-width:           1200px;
+  --canvas-height:          675px;
+  --canvas-min-width:       320px;
+
+  /* Sidebar */
+  --sidebar-width:          260px;
+  --sidebar-collapsed-width: 64px;
+  --right-panel-width:      320px;
+
+  /* Topbar */
+  --topbar-height:          60px;
+
+  /* Editor toolbar */
+  --toolbar-height:         48px;
+
+  /* Z-index layers */
+  --z-sidebar:   40;
+  --z-topbar:    50;
+  --z-modal:     60;
+  --z-toast:     70;
+  --z-tooltip:   80;
+}
+
+/* ── Base ──────────────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #F8FAFC;
+  color: #111827;
+  line-height: 1.5;
+}
+
+/* ── Custom scrollbar ──────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #D1D5DB transparent;
+}
+
+/* ── Utilities ─────────────────────────────────────────────── */
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  .text-gradient-blue-purple {
+    background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-teal-blue {
+    background: linear-gradient(135deg, #0D9488, #3B82F6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
+
+/* ── Components ────────────────────────────────────────────── */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-sm  { @apply inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none px-3 py-1.5 text-sm; }
+  .btn-md  { @apply inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none px-4 py-2 text-sm; }
+  .btn-lg  { @apply inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none px-6 py-2.5 text-base; }
+
+  .btn-primary {
+    @apply bg-brand-blue text-white hover:bg-blue-600 focus-visible:ring-brand-blue;
+  }
+  .btn-secondary {
+    @apply bg-surface-subtle text-text-primary border border-border hover:bg-gray-100 focus-visible:ring-gray-300;
+  }
+  .btn-ghost {
+    @apply bg-transparent text-text-muted hover:bg-surface-subtle hover:text-text-primary focus-visible:ring-gray-300;
+  }
+  .btn-danger {
+    @apply bg-red-500 text-white hover:bg-red-600 focus-visible:ring-red-400;
+  }
+
+  .card {
+    @apply bg-surface-card rounded-xl border border-border shadow-card;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary placeholder:text-text-faint focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all duration-150;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-text-primary mb-1;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+}
+
+/* ============================================
+   ANIMATED PARTICLES - HERO BACKGROUND ONLY
+   ============================================ */
+
+@property --ring-x {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 50;
+}
+
+@property --ring-y {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 50;
+}
+
+@property --ring-radius {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 150;
+}
+
+@property --animation-tick {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+/* Background layer for particles - wraps existing hero */
+.particles-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 110vh;
+  pointer-events: none;
+  z-index: 0;
+  
+  /* Particle configuration */
+  --ring-radius: 150;
+  --ring-thickness: 600;
+  --particle-count: 80;
+  --particle-rows: 25;
+  --particle-size: 2;
+  --particle-color: #4f46e5;
+  --particle-min-alpha: 0.1;
+  --particle-max-alpha: 1.0;
+  --seed: 200;
+  
+  /* Smooth cursor following */
+  transition: --ring-x 2s ease, --ring-y 2s ease;
+  
+  /* Animations */
+  animation: ripple 6s linear infinite, ring-pulse 6s ease-in-out infinite alternate;
+  
+  /* Houdini Paint Worklet */
+  background-image: paint(ring-particles);
+}
+
+/* Enable pointer events only on the background itself for cursor tracking */
+.particles-background-interactive {
+  pointer-events: auto;
+  position: absolute;
+  inset: 0;
+}
+
+/* Mobile: Reduce particles */
+@media (max-width: 768px) {
+  .particles-background {
+    --particle-count: 40;
+    --ring-radius: 100;
+    --ring-thickness: 400;
+  }
+}
+
+/* Animations */
+@keyframes ripple {
+  0% { --animation-tick: 0; }
+  100% { --animation-tick: 1; }
+}
+
+@keyframes ring-pulse {
+  0% { --ring-radius: 130; }
+  100% { --ring-radius: 200; }
+}
+
+@media (max-width: 768px) {
+  @keyframes ring-pulse {
+    0% { --ring-radius: 80; }
+    100% { --ring-radius: 140; }
+  }
+}
+
+/* Fallback for browsers without Paint Worklet */
+@supports not (background: paint(ring-particles)) {
+  .particles-background::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      circle at var(--ring-x, 50%) var(--ring-y, 50%),
+      rgba(79, 70, 229, 0.08) 0%,
+      rgba(79, 70, 229, 0.03) 30%,
+      transparent 60%
+    );
+  }
+}
