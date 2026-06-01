@@ -1,17 +1,18 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { FileText, FileBarChart, Lock, Eye, Compass, Copy, Trash2, Edit2, Share2, Download } from 'lucide-react';
 import { designSystem } from '../../lib/design-system';
 import { useCompanyDNAStore } from '../../lib/store/useCompanyDNAStore';
 import { useDocumentStore } from '../../lib/store/useDocumentStore';
 import { useBillingStore } from '../../lib/store/useBillingStore';
+import { usePitchPackagesStore } from '../../lib/store/usePitchPackagesStore';
 import { useNavigate } from 'react-router-dom';
 import { PlanGuard as DashboardPlanGuard } from './billing/PlanGuard';
 
 const MOCK_NUDGES = [
   { id: '1', text: "Your Series A deck hasn't been updated in 8 days. Investor meetings are approaching. Refresh it?", action: 'Refresh it? →', type: 'warning' },
   { id: '2', text: "You have 3 new investor matches based on your traction update. View matches →", action: 'View matches →', type: 'premium', locked: true },
-  { id: '3', text: "Your data room link was viewed 3 times today. See who →", action: 'See who →', type: 'info' }
+  { id: '3', text: "Your data room links were viewed recently. See who →", action: 'See who →', type: 'info' }
 ];
 
 export const DashboardOverview: React.FC = () => {
@@ -19,14 +20,23 @@ export const DashboardOverview: React.FC = () => {
   const navigate = useNavigate();
   const { canUseFeature, openUpgradeModal } = useBillingStore();
   const { documents, loadAllDocuments } = useDocumentStore();
+  const { records, loadRecords } = usePitchPackagesStore();
   
   useEffect(() => {
     loadAllDocuments();
-  }, [loadAllDocuments]);
+    loadRecords();
+  }, [loadAllDocuments, loadRecords]);
 
   // Fallback to empty array if not loaded yet
   const recentDocs = documents.slice(0, 3);
 
+  const totalViews = useMemo(() => {
+     let count = 0;
+     for (const r of records) {
+        if (r.docsViewed) count += r.docsViewed; // docsViewed is aggregated as unique docs seen, or we could aggregate total view count. But let's just use docsViewed for now or count if they opened it.
+     }
+     return count;
+  }, [records]);
   
   return (
     <div className="flex flex-col xl:flex-row gap-8">
@@ -78,9 +88,9 @@ export const DashboardOverview: React.FC = () => {
 
         {/* Metrics Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <MetricCard label="Documents Created" value="5" trend={+2} />
+          <MetricCard label="Documents Created" value={documents.length.toString()} trend={+2} />
           <MetricCard label="Outreach Ratio" value="12%" feature="automated_outreach" />
-          <MetricCard label="Data Room Views" value="28" feature="data_room_analytics" />
+          <MetricCard label="Data Room Views" value={totalViews.toString()} feature="data_room_analytics" />
           <MetricCard label="Top Match Score" value="94%" feature="investor_match_pro" highlight />
         </div>
 

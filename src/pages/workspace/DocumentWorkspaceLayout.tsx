@@ -11,24 +11,50 @@ import { motion } from "framer-motion";
 export const DocumentWorkspaceLayout: React.FC = () => {
   const { documentId } = useParams<{ documentId: string }>();
   const navigate = useNavigate();
-  const { document, loadDocument, investorView, setInvestorView } =
+  // Do not name local variables 'document' here; use 'docState' to avoid shadowing global document object
+  const { document: docState, loadDocument, investorView, setInvestorView } =
     useDocumentStore();
   const { colors, typography, componentVariants } = designSystem;
 
-  // To resolve UI flickering, we wait for mount
   const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (documentId) {
-      loadDocument(documentId);
-    }
+    let mounted = true;
+    const fetchDoc = async () => {
+      if (documentId) {
+        setLoading(true);
+        await loadDocument(documentId);
+        if (mounted) setLoading(false);
+      }
+    };
+    fetchDoc();
     setMounted(true);
+    return () => { mounted = false; };
   }, [documentId, loadDocument]);
 
-  if (!mounted || !document) {
+  if (!mounted || loading) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-[#FAFAFF]">
-        Loading workspace...
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin" />
+          <span className="text-slate-500 font-medium text-sm">Loading workspace...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!loading && !docState) {
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-[#FAFAFF] p-6">
+        <h2 className="text-2xl font-bold text-slate-800 mb-2">Document Not Found</h2>
+        <p className="text-slate-500 mb-6 text-center max-w-sm">The document you are looking for might have been deleted, or you might not have access to it.</p>
+        <button
+          onClick={() => navigate("/dashboard")}
+          className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
+        >
+          Return to Dashboard
+        </button>
       </div>
     );
   }
@@ -57,11 +83,11 @@ export const DocumentWorkspaceLayout: React.FC = () => {
             <span
               className={`${componentVariants.badge.base} ${componentVariants.badge.docType.pitchDeck} !py-0.5 !px-2 !text-[10px]`}
             >
-              {document.type}
+              {docState.type}
             </span>
             <span className="text-sm font-medium text-slate-400">/</span>
             <span className="text-sm font-semibold text-slate-700">
-              {document.title}
+              {docState.title}
             </span>
           </div>
         </div>
@@ -104,7 +130,7 @@ export const DocumentWorkspaceLayout: React.FC = () => {
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement("a");
                     a.href = url;
-                    a.download = `${document.title || 'document'}.pdf`;
+                    a.download = `${docState?.title || 'document'}.pdf`;
                     a.click();
                   } catch (e) {
                      alert("Failed to export PDF. Please try again.");
@@ -124,7 +150,7 @@ export const DocumentWorkspaceLayout: React.FC = () => {
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement("a");
                     a.href = url;
-                    a.download = `${document.title || 'document'}.pptx`;
+                    a.download = `${docState?.title || 'document'}.pptx`;
                     a.click();
                   } catch (e) {
                      alert("Failed to export PPTX. Please try again.");

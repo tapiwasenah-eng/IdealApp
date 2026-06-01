@@ -5,6 +5,7 @@ import multer from 'multer';
 import { FieldValue } from "firebase-admin/firestore";
 import { getDb, getAdminApp } from "../firebaseAdmin.ts";
 import { requireAuth } from "../middleware/auth.ts";
+import { DataRoomPermissions, defaultPermissions } from "../../src/types/dataRoom.js";
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -17,13 +18,20 @@ function makeToken() {
   return crypto.randomBytes(24).toString("hex");
 }
 
-const CreateLinkSchema = z.object({
-  documentIds: z.array(z.string()).min(1),
+const permissionsSchema = z.object({
   hasPassword: z.boolean().default(false),
-  password: z.string().optional(),        // plain only for creation
+  password: z.string().optional(),
   expiresAt: z.string().datetime().nullable().optional(),
   allowDownload: z.boolean().default(false),
-  emailNotify: z.boolean().default(false),
+  requireNDA: z.boolean().default(false),
+});
+
+const CreateLinkSchema = z.object({
+  documentIds: z.array(z.string()).min(1),
+  companyId: z.string().optional(),
+  label: z.string().optional(),
+  campaignId: z.string().optional(),
+  permissions: permissionsSchema.optional(),
 });
 
 // PUBLIC ENDPOINTS
@@ -47,7 +55,9 @@ router.post("/public/:token", async (req, res, next) => {
       return res.status(400).json({ success: false, error: "This link has expired" });
     }
     
-    if (link.hasPassword) {
+    const permissions = link.permissions || {};
+    
+    if (permissions.hasPassword) {
       if (!password) {
         return res.status(401).json({ success: false, requirePassword: true });
       }
@@ -66,15 +76,45 @@ router.post("/public/:token", async (req, res, next) => {
       })
     });
     
-    // For now we'll just return the document IDs. In a real app we'd fetch the document metadata here
-    // or the frontend fetches them.
+    // Fetch actual documents for returning in the data room payload
+    const documents = [];
+    if (link.documentIds && link.documentIds.length > 0) {
+      for (const docId of link.documentIds) {
+        const docSnap = await db.collection("users").doc(link.ownerId).collection("documents").doc(docId).get();
+        if (docSnap.exists) {
+          const docData = docSnap.data();
+          const sectionsSnap = await db.collection("users").doc(link.ownerId).collection("documents").doc(docId).collection("sections").get();
+          
+          const subSections: Record<string, any> = {};
+          sectionsSnap.forEach(s => subSections[s.id] = s.data());
+          
+          let sections = [];
+          if (docData?.sectionOrder && docData.sectionOrder.length > 0) {
+            sections = docData.sectionOrder.map((sid: string) => subSections[sid]).filter(Boolean);
+          } else if (docData?.sections && docData.sections.length > 0) {
+            sections = docData.sections;
+          }
+          
+          documents.push({
+            id: docId,
+            title: docData?.title || "Untitled",
+            companyName: docData?.companyName || "My Company",
+            type: docData?.type || "Custom",
+            sections
+          });
+        }
+      }
+    }
+
     res.json({
       success: true,
       dataRoom: {
         id: linkDoc.id,
         ownerId: link.ownerId,
         documentIds: link.documentIds,
-        allowDownload: link.allowDownload
+        permissions: link.permissions,
+        allowDownload: permissions.allowDownload,
+        documents
       }
     });
     
@@ -203,30 +243,36 @@ router.delete('/:id', async (req, res, next) => {
   }
 });
 
-// POST /api/data-room-links
-router.post("/", async (req, res, next) => {
+// POST /api/data-room-links/create
+router.post("/create", async (req, res, next) => {
   try {
     const parsed = CreateLinkSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ success: false, error: parsed.error.message });
+    if (!parsed.success) return res.status(400).json({ success: false, error: parsed.error.issues });
 
     const db = getDb();
     const token = makeToken();
     const now = new Date();
 
+    const permissions: DataRoomPermissions = parsed.data.permissions ?? defaultPermissions;
     const passwordHash =
-      parsed.data.hasPassword && parsed.data.password
-        ? hashPassword(parsed.data.password)
+      permissions.hasPassword && permissions.password
+        ? hashPassword(permissions.password)
         : null;
 
     const payload = {
       token,
       ownerId: req.user!.uid,
+      companyId: parsed.data.companyId || null,
+      label: parsed.data.label || null,
+      campaignId: parsed.data.campaignId || null,
       documentIds: parsed.data.documentIds,
-      hasPassword: parsed.data.hasPassword,
+      permissions: {
+        hasPassword: permissions.hasPassword,
+        allowDownload: permissions.allowDownload,
+        requireNDA: permissions.requireNDA,
+      },
       passwordHash,
-      expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
-      allowDownload: parsed.data.allowDownload,
-      emailNotify: parsed.data.emailNotify,
+      expiresAt: permissions.expiresAt ? new Date(permissions.expiresAt) : null,
       viewCount: 0,
       accessLog: [],
       createdAt: now,
@@ -239,7 +285,7 @@ router.post("/", async (req, res, next) => {
       success: true,
       id: ref.id,
       token,
-      publicUrl: `${process.env.PUBLIC_APP_URL || "http://localhost:5173"}/r/${token}`, // updating to standard /r/ route
+      publicUrl: `${process.env.PUBLIC_APP_URL || "http://localhost:5173"}/r/${token}`,
     });
   } catch(err) {
     next(err);

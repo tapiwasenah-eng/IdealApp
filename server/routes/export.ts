@@ -1,8 +1,10 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { getDb } from '../firebaseAdmin.js';
-import puppeteer from 'puppeteer';
+import puppeteer, { PuppeteerLifeCycleEvent } from 'puppeteer';
 import pptxgen from 'pptxgenjs';
+
+const EXPORT_WAIT_UNTIL: PuppeteerLifeCycleEvent = "load";
 
 const router = express.Router();
 
@@ -59,7 +61,7 @@ router.get('/pdf/:documentId', async (req, res, next) => {
     });
     
     const page = await browser.newPage();
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    await page.setContent(htmlContent, { waitUntil: EXPORT_WAIT_UNTIL });
     const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
     await browser.close();
 

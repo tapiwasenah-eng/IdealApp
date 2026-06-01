@@ -18,6 +18,7 @@ const TemplatesPage = lazy(() => import('./pages/TemplatesPage'))
 const TemplateDetailPage = lazy(() => import('./pages/TemplateDetailPage'))
 const TutorialsPage = lazy(() => import('./pages/TutorialsPage'))
 const DocumentationPage = lazy(() => import('./pages/DocumentationPage'))
+import { DashboardAnalytics } from './pages/dashboard/DashboardAnalytics';
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const AuthPage = lazy(() => import('./pages/AuthPage'))
 const CheckoutPage = lazy(() => import('./pages/CheckoutPage'))
@@ -27,6 +28,8 @@ const GenerateDocumentPage = lazy(() => import('./pages/GenerateDocumentPage'))
 const OnboardingFlow = lazy(() => import('./pages/onboarding/OnboardingFlow'))
 const DashboardLayout = lazy(() => import('./pages/dashboard/DashboardLayout').then(m => ({ default: m.DashboardLayout })))
 const DashboardOverview = lazy(() => import('./pages/dashboard/DashboardOverview').then(m => ({ default: m.DashboardOverview })))
+const DashboardDocuments = lazy(() => import('./pages/dashboard/DashboardDocuments').then(m => ({ default: m.DashboardDocuments })))
+const DashboardTemplates = lazy(() => import('./pages/dashboard/DashboardTemplates').then(m => ({ default: m.DashboardTemplates })))
 const CompanyDNAEditor = lazy(() => import('./pages/dashboard/CompanyDNAEditor').then(m => ({ default: m.CompanyDNAEditor })))
 const DocumentWorkspaceLayout = lazy(() => import('./pages/workspace/DocumentWorkspaceLayout').then(m => ({ default: m.DocumentWorkspaceLayout })))
 const InvestorExplorerPage = lazy(() => import('./pages/dashboard/investors/InvestorExplorerPage').then(m => ({ default: m.InvestorExplorerPage })))
@@ -165,11 +168,22 @@ export default function App() {
             <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
               <Route index element={<DashboardOverview />} />
               <Route path="dna" element={<CompanyDNAEditor />} />
+              <Route path="documents" element={<DashboardDocuments />} />
+              <Route path="templates" element={<DashboardTemplates />} />
               <Route path="data-room" element={<DataRoomPage />} />
               <Route path="investors" element={<InvestorExplorerPage />} />
               <Route path="outreach" element={<OutreachTrackerPage />} />
               {/* Other dashboard routes will go here later */}
-              <Route path="*" element={<div className="p-8">Work in progress</div>} />
+              <Route path="analytics" element={<DashboardAnalytics />} />
+              <Route path="settings" element={<SettingsPage inDashboard />} />
+              <Route path="*" element={
+                <div className="flex items-center justify-center h-[60vh]">
+                  <div className="text-center">
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2">Page Not Found</h2>
+                    <p className="text-slate-500">The dashboard page you're looking for doesn't exist or is currently unavailable.</p>
+                  </div>
+                </div>
+              } />
             </Route>
 
             <Route

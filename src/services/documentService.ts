@@ -84,9 +84,9 @@ export async function createDocument(params: {
   content?: any;
   status?: 'draft' | 'generating' | 'complete' | 'error' | 'in_progress' | 'completed';
 }): Promise<DocumentRecord> {
-  const path = 'documents';
+  const path = `users/${params.userId}/documents`;
   try {
-    const ref = await addDoc(collection(db, path), {
+    const parentRef = await addDoc(collection(db, path), {
       title: params.title,
       type: params.type,
       status: params.status ?? 'draft',
@@ -99,17 +99,40 @@ export async function createDocument(params: {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    const snap = await getDoc(ref);
-    return docToRecord(snap.data()!, ref.id);
+
+    if (params.content && params.content.sections) {
+        // Also save subcollections to match DocumentWorkspaceLayout expectations
+        const { writeBatch } = await import('firebase/firestore');
+        const batch = writeBatch(db);
+        const sectionOrder: string[] = [];
+        params.content.sections.forEach((sec: any, idx: number) => {
+            const secId = sec.id || `s-${idx}`;
+            sectionOrder.push(secId);
+            const secRef = doc(db, path, parentRef.id, "sections", secId);
+            batch.set(secRef, {
+                id: secId,
+                title: sec.heading || sec.title || `Section ${idx + 1}`,
+                content: sec.body || sec.content || "",
+                status: "empty"
+            });
+        });
+        batch.update(parentRef, { sectionOrder });
+        await batch.commit();
+    }
+
+    const snap = await getDoc(parentRef);
+    return docToRecord(snap.data()!, parentRef.id);
   } catch (error) {
     return handleFirestoreError(error, OperationType.CREATE, path);
   }
 }
 
 export async function getDocument(id: string): Promise<DocumentRecord | null> {
-  const path = `documents/${id}`;
+  const { user } = useStore.getState();
+  if (!user) return null;
+  const path = `users/${user.uid}/documents/${id}`;
   try {
-    const snap = await getDoc(doc(db, 'documents', id));
+    const snap = await getDoc(doc(db, 'users', user.uid, 'documents', id));
     if (!snap.exists()) return null;
     return docToRecord(snap.data(), snap.id);
   } catch (error) {
@@ -121,9 +144,11 @@ export async function updateDocument(
   id: string,
   data: Partial<Omit<DocumentRecord, 'id' | 'createdAt' | 'ownerId'>>
 ): Promise<void> {
-  const path = `documents/${id}`;
+  const { user } = useStore.getState();
+  if (!user) throw new Error("Not authenticated");
+  const path = `users/${user.uid}/documents/${id}`;
   try {
-    await updateDoc(doc(db, 'documents', id), {
+    await updateDoc(doc(db, 'users', user.uid, 'documents', id), {
       ...data,
       updatedAt: serverTimestamp(),
     });
@@ -133,9 +158,11 @@ export async function updateDocument(
 }
 
 export async function deleteDocument(id: string): Promise<void> {
-  const path = `documents/${id}`;
+  const { user } = useStore.getState();
+  if (!user) throw new Error("Not authenticated");
+  const path = `users/${user.uid}/documents/${id}`;
   try {
-    await deleteDoc(doc(db, 'documents', id));
+    await deleteDoc(doc(db, 'users', user.uid, 'documents', id));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }
@@ -145,10 +172,9 @@ export function subscribeToUserDocuments(
   userId: string,
   callback: (docs: DocumentRecord[]) => void
 ): Unsubscribe {
-  const path = 'documents';
+  const path = `users/${userId}/documents`;
   const q = query(
     collection(db, path),
-    where('ownerId', '==', userId),
     orderBy('updatedAt', 'desc')
   );
   return onSnapshot(q, (snapshot: QuerySnapshot) => {

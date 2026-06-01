@@ -16,6 +16,26 @@ export const InvestorExplorerPage: React.FC = () => {
     loadInvestors();
   }, [loadInvestors]);
 
+  const parseCheckSizeStr = (checkSizeStr: string) => {
+    if (!checkSizeStr) return { min: 0, max: 0 };
+    // e.g. "$1M - $5M", "$500k"
+    const cleaned = checkSizeStr.toLowerCase().replace(/[^0-9.km-]/g, '');
+    const parts = cleaned.split('-');
+    
+    const parseValue = (val: string) => {
+      let num = parseFloat(val);
+      if (val.includes('m')) num *= 1000000;
+      else if (val.includes('k')) num *= 1000;
+      return isNaN(num) ? 0 : num;
+    };
+
+    if (parts.length === 2) {
+      return { min: parseValue(parts[0]), max: parseValue(parts[1]) };
+    } else {
+      return { min: parseValue(parts[0]), max: parseValue(parts[0]) };
+    }
+  };
+
   const filteredInvestors = investors.filter((inv) => {
     if (
       filters.search &&
@@ -23,6 +43,13 @@ export const InvestorExplorerPage: React.FC = () => {
       !inv.firm.toLowerCase().includes(filters.search.toLowerCase())
     )
       return false;
+
+    // Check size filter logic (only apply max if it's less than 20M, otherwise it's "unlimited")
+    if (filters.checkSizeMax < 20000000 && inv.checkSize) {
+       const { min } = parseCheckSizeStr(inv.checkSize);
+       if (min > filters.checkSizeMax) return false;
+    }
+
     return true;
   });
 

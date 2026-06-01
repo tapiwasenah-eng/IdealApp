@@ -103,7 +103,7 @@ export const InvestorDataRoomView: React.FC = () => {
     );
   }
 
-  const activeDocObj = documents.find((d) => d.id === selectedDocId) || { name: "Mock Document", type: "Pitch Deck" };
+  const activeDocObj = dataRoom?.documents?.find((d: any) => d.id === selectedDocId) || { title: "Document", type: "Pitch Deck", sections: [] };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -130,17 +130,18 @@ export const InvestorDataRoomView: React.FC = () => {
             <div>
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-2">Shared Materials</h3>
               <div className="space-y-1">
-                {(dataRoom?.documentIds || []).map((id: string, idx: number) => (
+                {(dataRoom?.documents || []).map((doc: any, idx: number) => (
                   <button
-                    key={id}
-                    onClick={() => setSelectedDocId(id)}
-                    className={`w-full flex items-start gap-3 p-3 rounded-xl text-left transition-all ${selectedDocId === id ? "bg-indigo-50 border border-indigo-200" : "hover:bg-slate-50 border border-transparent"}`}
+                    key={doc.id}
+                    onClick={() => setSelectedDocId(doc.id)}
+                    className={`w-full flex items-start gap-3 p-3 rounded-xl text-left transition-all ${selectedDocId === doc.id ? "bg-indigo-50 border border-indigo-200" : "hover:bg-slate-50 border border-transparent"}`}
                   >
-                    <FileText size={18} className={`mt-0.5 ${selectedDocId === id ? "text-indigo-600" : "text-slate-400"}`} />
+                    <FileText size={18} className={`mt-0.5 ${selectedDocId === doc.id ? "text-indigo-600" : "text-slate-400"}`} />
                     <div>
-                      <div className={`text-sm font-semibold ${selectedDocId === id ? "text-indigo-900" : "text-slate-700"}`}>
-                        Document #{parseInt(id.replace(/\D/g, '')) || idx + 1}
+                      <div className={`text-sm font-semibold ${selectedDocId === doc.id ? "text-indigo-900" : "text-slate-700"}`}>
+                        {doc.title || `Document #${idx + 1}`}
                       </div>
+                      <div className="text-xs text-slate-500">{doc.type || "Pitch Deck"}</div>
                     </div>
                   </button>
                 ))}
@@ -155,7 +156,7 @@ export const InvestorDataRoomView: React.FC = () => {
               <div className="h-14 border-b border-slate-200 bg-slate-50 flex items-center justify-between px-6 flex-shrink-0">
                 <div className="flex items-center gap-2">
                   <FileText size={18} className="text-indigo-600" />
-                  <span className="font-semibold text-slate-800 text-sm">{activeDocObj.name}</span>
+                  <span className="font-semibold text-slate-800 text-sm">{activeDocObj.title}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-medium text-emerald-600 flex items-center gap-1">
@@ -168,11 +169,26 @@ export const InvestorDataRoomView: React.FC = () => {
                   )}
                 </div>
               </div>
-              <div className="flex-1 bg-slate-200/50 flex flex-col items-center justify-center p-8 overflow-y-auto">
-                <div className="w-full max-w-[800px] aspect-video bg-white shadow-md rounded-lg flex flex-col items-center justify-center text-center p-12 relative overflow-hidden text-slate-400">
-                  <FileText size={48} className="mb-4 opacity-50" />
-                  This is the document preview pane.
-                </div>
+              <div className="flex-1 bg-slate-200/50 flex flex-col items-center p-8 overflow-y-auto">
+                {activeDocObj.sections && activeDocObj.sections.length > 0 ? (
+                  <div className="w-full space-y-6">
+                    {activeDocObj.sections.map((section: any) => (
+                      <div key={section.id} className="w-full bg-white shadow-md rounded-lg p-10 prose prose-slate">
+                        <h2>{section.title}</h2>
+                        {section.content ? (
+                           <div dangerouslySetInnerHTML={{ __html: section.content }} />
+                        ) : (
+                           <p className="text-slate-400 italic">No content in this section.</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="w-full max-w-[800px] aspect-video bg-white shadow-md rounded-lg flex flex-col items-center justify-center text-center p-12 relative overflow-hidden text-slate-400">
+                    <FileText size={48} className="mb-4 opacity-50" />
+                    No content available
+                  </div>
+                )}
               </div>
             </div>
           ) : null}

@@ -19,11 +19,55 @@ export const PitchPackageBuilder: React.FC<{
   if (!isOpen) return null;
 
   const [isSending, setIsSending] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set(["doc1"]));
+  const availableDocs = [
+    { id: "doc1", name: "Seed Pitch Deck v3" },
+    { id: "doc2", name: "Financial Model 3 YR" },
+    { id: "doc3", name: "Executive Summary" }
+  ];
+
+  const toggleDoc = (id: string) => {
+    const newDocs = new Set(selectedDocs);
+    if (newDocs.has(id)) newDocs.delete(id);
+    else newDocs.add(id);
+    setSelectedDocs(newDocs);
+  };
   
   const handleFinish = async () => {
+    if (selectedDocs.size === 0) {
+      setErrorMsg("Please select at least one document.");
+      setStep(1);
+      return;
+    }
+
     if (initialInvestor) {
       setIsSending(true);
+      setErrorMsg("");
       try {
+        // 1. Create real Data Room Link
+        const linkRes = await fetch('/api/data-room-links/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            documentIds: Array.from(selectedDocs),
+            permissions: {
+              allowDownload: true,
+              hasPassword: false
+            },
+            label: `Pitch to ${initialInvestor.name}`
+          })
+        });
+
+        const linkData = await linkRes.json();
+        if (!linkRes.ok || !linkData.success) {
+          throw new Error(linkData.error || "Failed to create data room link");
+        }
+
+        const roomUrl = linkData.publicUrl;
+        const roomToken = linkData.token;
+
+        // 2. Send outreach
         const res = await fetch('/api/outreach/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -31,10 +75,11 @@ export const PitchPackageBuilder: React.FC<{
             emailIds: ['investor@example.com'], // mock email for the firm
             investorName: initialInvestor.name,
             firm: initialInvestor.firm,
-            dataRoomLink: 'https://idealapp.dev/r/mocklink' // replace with generated link if we implement that
+            dataRoomLink: roomUrl,
+            roomToken: roomToken
           })
         });
-        if (!res.ok) throw new Error('Failed to send');
+        if (!res.ok) throw new Error('Failed to send outreach');
         
         await updateRecord({
           id: Date.now().toString(),
@@ -47,11 +92,12 @@ export const PitchPackageBuilder: React.FC<{
           docsViewed: 0,
           status: "Sent"
         });
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
+        setErrorMsg(err.message || "An error occurred");
       } finally {
         setIsSending(false);
-        onClose();
+        if (!errorMsg) onClose();
       }
     } else {
       onClose();
@@ -107,12 +153,13 @@ export const PitchPackageBuilder: React.FC<{
                   Choose which materials to include in this data room link.
                 </p>
 
+                {errorMsg && (
+                  <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4">
+                    {errorMsg}
+                  </div>
+                )}
                 <div className="space-y-3">
-                  {[
-                    "Seed Pitch Deck v3",
-                    "Financial Model 3 YR",
-                    "Executive Summary",
-                  ].map((doc, i) => (
+                  {availableDocs.map((doc, i) => (
                     <label
                       key={i}
                       className="flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50 cursor-pointer transition-colors shadow-sm"
@@ -120,7 +167,8 @@ export const PitchPackageBuilder: React.FC<{
                       <div className="flex items-center gap-3">
                         <input
                           type="checkbox"
-                          defaultChecked={i === 0}
+                          checked={selectedDocs.has(doc.id)}
+                          onChange={() => toggleDoc(doc.id)}
                           className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                         />
                         <div className="w-10 h-10 rounded-lg bg-indigo-50 flex flex-col items-center justify-center text-indigo-600">
@@ -128,7 +176,7 @@ export const PitchPackageBuilder: React.FC<{
                         </div>
                         <div>
                           <div className="font-semibold text-slate-800 text-sm font-sans">
-                            {doc}
+                            {doc.name}
                           </div>
                           <div className="text-xs text-slate-400">
                             PDF • Updated 2 hrs ago
@@ -182,6 +230,12 @@ export const PitchPackageBuilder: React.FC<{
                   </p>
                 </div>
 
+                {errorMsg && (
+                  <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center justify-center text-center">
+                    {errorMsg}
+                  </div>
+                )}
+
                 {!canUseFeature('automated_outreach') && (
                   <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3">
                     <div className="mt-0.5">
@@ -222,9 +276,10 @@ export const PitchPackageBuilder: React.FC<{
                 if (step < 3) setStep(step + 1);
                 else handleFinish();
               }}
-              className="px-6 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+              disabled={isSending}
+              className="px-6 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50"
             >
-              {step === 3 ? "Copy to Clipboard" : "Continue"}
+              {isSending ? "Processing..." : step === 3 ? "Send Package" : "Continue"}
             </button>
           </div>
         </motion.div>

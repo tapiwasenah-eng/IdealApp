@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { db, auth } from "../firebase";
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, getDocs, writeBatch, Timestamp } from "firebase/firestore";
+import toast from "react-hot-toast";
 
 export interface DocumentSection {
   id: string;
@@ -16,6 +17,7 @@ export interface DocumentState {
   companyName: string;
   type: string;
   sections: DocumentSection[];
+  sectionOrder?: string[];
 }
 
 interface DocumentStore {
@@ -29,14 +31,15 @@ interface DocumentStore {
   createDocumentFromTemplate: (templateId: string, template: any) => Promise<string>;
   setActiveSection: (id: string) => void;
   updateSection: (id: string, content: string) => void;
+  saveSectionToFirestore: (docId: string, id: string, content: string, status: string) => Promise<void>;
   setInvestorView: (view: boolean) => void;
   reorderSections: (startIndex: number, endIndex: number) => void;
   addSection: (title: string) => void;
-  saveCurrentDocument: () => Promise<void>;
 }
 
 // In-memory cache for fast switching during session
 const docCache: Record<string, DocumentState> = {};
+const saveTimeouts: Record<string, ReturnType<typeof setTimeout>> = {};
 
 export const useDocumentStore = create<DocumentStore>((set, get) => ({
   documents: [],
@@ -81,6 +84,31 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       let docData: DocumentState;
       if (snap.exists()) {
         docData = snap.data() as DocumentState;
+        
+        // Load sections from subcollection
+        const sectionsSnap = await getDocs(collection(db, "users", user.uid, "documents", id, "sections"));
+        const subSections: Record<string, DocumentSection> = {};
+        sectionsSnap.forEach(s => {
+          subSections[s.id] = s.data() as DocumentSection;
+        });
+
+        // Resolve sections using sectionOrder, fallback to legacy document.sections
+        let finalSections: DocumentSection[] = [];
+        if (docData.sectionOrder && docData.sectionOrder.length > 0) {
+          docData.sectionOrder.forEach(secId => {
+            if (subSections[secId]) finalSections.push(subSections[secId]);
+          });
+        } else if (docData.sections && docData.sections.length > 0) {
+          // Legacy support: sections embedded in document
+          finalSections = docData.sections;
+        }
+
+        if (finalSections.length === 0) {
+           finalSections = [{ id: "1", title: "Introduction", content: "", status: "empty" }];
+        }
+
+        docData.sections = finalSections;
+
       } else if (docCache[id]) {
         docData = docCache[id];
       } else {
@@ -90,7 +118,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           title: "Untitled",
           companyName: "My Company",
           type: "Custom",
-          sections: [{ id: "1", title: "Introduction", content: "", status: "empty" }]
+          sections: [{ id: "1", title: "Introduction", content: "", status: "empty" }],
+          sectionOrder: ["1"]
         };
       }
       
@@ -103,6 +132,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       });
     } catch (error) {
       console.error("Failed to load document:", error);
+      toast.error("Failed to load document content.");
       set({ isLoading: false });
     }
   },
@@ -112,57 +142,85 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!user) throw new Error("Not authenticated");
 
     const newId = Date.now().toString();
+    const sections: DocumentSection[] = template.sections ? template.sections.map((s: any, idx: number) => ({
+      id: s.id || `s-${idx}`,
+      title: s.heading || "Untitled Section",
+      content: s.body || "",
+      status: "empty"
+    })) : [{ id: "1", title: "Introduction", content: "", status: "empty" }];
+
     const newDoc: DocumentState = {
       id: newId,
       title: `Untitled ${template.name}`,
       companyName: "My Company",
       type: template.category || template.name,
-      sections: template.sections ? template.sections.map((s: any, idx: number) => ({
-        id: s.id || `s-${idx}`,
-        title: s.heading || "Untitled Section",
-        content: s.body || "",
-        status: "empty"
-      })) : [{ id: "1", title: "Introduction", content: "", status: "empty" }]
+      sections: sections,
+      sectionOrder: sections.map(s => s.id)
     };
 
-    const docRef = doc(db, "users", user.uid, "documents", newId);
-    await setDoc(docRef, newDoc);
-    docCache[newId] = newDoc;
-    return newId;
+    try {
+      const batch = writeBatch(db);
+      
+      // Write parent doc (without heavy sections array to save space)
+      const docRef = doc(db, "users", user.uid, "documents", newId);
+      const parentData = { ...newDoc, sections: [] }; // Don't duplicate sections locally
+      batch.set(docRef, parentData);
+
+      // Write each section to subcollection
+      sections.forEach(sec => {
+         const secRef = doc(db, "users", user.uid, "documents", newId, "sections", sec.id);
+         batch.set(secRef, sec);
+      });
+
+      await batch.commit();
+      docCache[newId] = newDoc;
+      return newId;
+    } catch (error) {
+      console.error("Error creating document:", error);
+      toast.error("Failed to create document.");
+      throw error;
+    }
   },
 
   setActiveSection: (id) => set({ activeSectionId: id }),
 
   updateSection: (id, content) => {
+    const status = content.trim() ? "in-progress" : "empty";
+    let currentDocId: string | undefined;
+
     set((state) => {
       if (!state.document) return state;
+      currentDocId = state.document.id;
       const newSections: DocumentSection[] = state.document.sections.map((s) =>
-        s.id === id
-          ? {
-              ...s,
-              content,
-              status: (content.trim() ? "in-progress" : "empty") as "in-progress" | "empty",
-            }
-          : s
+        s.id === id ? { ...s, content, status } : s
       );
       const updatedDoc = { ...state.document, sections: newSections };
       docCache[updatedDoc.id] = updatedDoc;
       return { document: updatedDoc };
     });
-    get().saveCurrentDocument(); // Debounced save handled by components or here, calling save
+
+    if (!currentDocId) return;
+
+    // Debounce the save to Firestore
+    if (saveTimeouts[id]) {
+      clearTimeout(saveTimeouts[id]);
+    }
+    
+    saveTimeouts[id] = setTimeout(() => {
+      get().saveSectionToFirestore(currentDocId!, id, content, status);
+    }, 1000);
   },
 
-  saveCurrentDocument: async () => {
-    const { document } = get();
-    if (!document) return;
+  saveSectionToFirestore: async (docId, id, content, status) => {
     const user = auth.currentUser;
     if (!user) return;
     
     try {
-      const docRef = doc(db, "users", user.uid, "documents", document.id);
-      await setDoc(docRef, document, { merge: true });
-    } catch (e) {
-      console.error("Failed to save document:", e);
+      const secRef = doc(db, "users", user.uid, "documents", docId, "sections", id);
+      await setDoc(secRef, { content, status }, { merge: true });
+    } catch (e: any) {
+      console.error("Failed to save section:", e);
+      toast.error("Failed to save your recent edits.");
     }
   },
 
@@ -174,11 +232,23 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const result = Array.from(state.document.sections);
       const [removed] = result.splice(startIndex, 1);
       result.splice(endIndex, 0, removed);
-      const updatedDoc = { ...state.document, sections: result };
+      
+      const newOrder = result.map(s => s.id);
+      const updatedDoc = { ...state.document, sections: result, sectionOrder: newOrder };
       docCache[updatedDoc.id] = updatedDoc;
+
+      // Update order in Firestore immediately
+      const user = auth.currentUser;
+      if (user) {
+         const docRef = doc(db, "users", user.uid, "documents", state.document.id);
+         setDoc(docRef, { sectionOrder: newOrder }, { merge: true }).catch(err => {
+            console.error("Failed to update section order", err);
+            toast.error("Failed to save new order.");
+         });
+      }
+
       return { document: updatedDoc };
     });
-    get().saveCurrentDocument();
   },
 
   addSection: (title) => {
@@ -190,13 +260,35 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         content: "",
         status: "empty",
       };
+      
+      const newSections = [...state.document.sections, newSection];
+      const newOrder = newSections.map(s => s.id);
+      
       const updatedDoc = {
         ...state.document,
-        sections: [...state.document.sections, newSection],
+        sections: newSections,
+        sectionOrder: newOrder
       };
       docCache[updatedDoc.id] = updatedDoc;
+
+      // Write to Firestore immediately
+      const user = auth.currentUser;
+      if (user) {
+         const batch = writeBatch(db);
+         const docRef = doc(db, "users", user.uid, "documents", state.document.id);
+         batch.set(docRef, { sectionOrder: newOrder }, { merge: true });
+         
+         const secRef = doc(db, "users", user.uid, "documents", state.document.id, "sections", newSection.id);
+         batch.set(secRef, newSection);
+         
+         batch.commit().catch(err => {
+            console.error(err);
+            toast.error("Failed to add section.");
+         });
+      }
+
       return { document: updatedDoc };
     });
-    get().saveCurrentDocument();
   },
 }));
+

@@ -22,7 +22,17 @@ Stores structured documents (like pitch decks) owned by the user.
   - `title`: string
   - `companyName`: string
   - `type`: string
-  - `sections`: array of objects `{ id, title, content, status }`
+  - `sectionOrder`: array of strings (ordered list of section IDs)
+  - `sections`: array of objects (Legacy fallback - DO NOT USE FOR NEW DOCS. Sections are now moving to subcollections).
+
+#### `users/{userId}/documents/{documentId}/sections` (Subcollection)
+Stores the individual sections/slides of a document, avoiding large payloads on the main document.
+- **Document ID**: `sectionId`
+- **Fields**:
+  - `id`: string
+  - `title`: string
+  - `content`: string (HTML content from Tiptap)
+  - `status`: string (`'empty' | 'in-progress' | 'complete'`)
 
 ### `users/{userId}/investors` (Subcollection)
 Stores the user's CRM instance of saved/targeted investors.
@@ -41,6 +51,8 @@ Stores pitch packages sent to specific investors and tracks the status of intera
   - `sentDate`, `lastOpened`, `timeSpent`: string 
   - `docsViewed`: number
   - `status`: string (`Sent`, `Opened`, `Interested`, etc.)
+  - `dataRoomLink`: string (The public generated URL for the package)
+  - `roomToken`: string (Nullable, ties back to the dataRoomLinks collection)
 
 *(Note: In the future, outreach will be directly tied to data room analytics rather than manual string updates, but this allows MVP state persistence.)*
 
@@ -51,11 +63,16 @@ Stores shared links (Data Rooms) created by founders, linking multiple documents
 - **Fields**:
   - `token`: string (Used for the `/r/:token` public URL path)
   - `ownerId`: string (Reference to user ID)
+  - `companyId`: string (Reference to related company/DNA)
+  - `label`: string (Internal label or investor reference)
+  - `campaignId`: string (Nullable campaign tracking ID)
   - `documentIds`: array of strings
-  - `hasPassword`: boolean
+  - `permissions`: object
+    - `hasPassword`: boolean
+    - `allowDownload`: boolean
+    - `requireNDA`: boolean
   - `passwordHash`: string (null if none)
   - `expiresAt`: Timestamp (null if never)
-  - `allowDownload`: boolean
   - `viewCount`: number
   - `accessLog`: array of objects `{ timestamp, type }`
 

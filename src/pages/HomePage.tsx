@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { motion, Variants, AnimatePresence } from 'framer-motion';
 import {
   Send, Lightbulb, LayoutDashboard, TrendingUp,
@@ -549,9 +550,11 @@ function AIPromptBar({
     setLoading(true);
     try {
       const doc = await generateFromPrompt(value.trim());
-      navigate(`/editor/${doc.id}`);
-    } catch (err) {
+      toast.success('Document generated successfully!', { id: 'gen1' });
+      navigate(`/documents/${doc.id}`);
+    } catch (err: any) {
       console.error(err);
+      toast.error(err.message || 'Failed to generate document. Please try again.', { id: 'gen1' });
     } finally {
       setLoading(false);
     }

@@ -9,6 +9,7 @@ import SEOHead from '../components/Shared/SEOHead';
 import { organizationSchema, breadcrumbSchema } from '../data/seo-schemas';
 import { ArrowLeft, Star, FileText, CheckCircle2, Crown } from 'lucide-react';
 import { designSystem } from '../lib/design-system';
+import toast from 'react-hot-toast';
 
 export default function TemplateDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -36,7 +37,7 @@ export default function TemplateDetailPage() {
     );
   }
 
-  const handleUse = () => {
+  const handleUse = async () => {
     if (isAnonymous) {
       navigate('/auth?mode=signup&redirect=templates');
       return;
@@ -45,8 +46,14 @@ export default function TemplateDetailPage() {
       navigate('/pricing');
       return;
     }
-    const newDocId = createDocumentFromTemplate(template.id, template);
-    navigate(`/documents/${newDocId}`);
+    try {
+      toast.loading("Generating workspace...", { id: "gen-doc" });
+      const newDocId = await createDocumentFromTemplate(template.id, template);
+      toast.success("Workspace ready!", { id: "gen-doc", duration: 2000 });
+      navigate(`/documents/${newDocId}`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create document", { id: "gen-doc" });
+    }
   };
 
   return (

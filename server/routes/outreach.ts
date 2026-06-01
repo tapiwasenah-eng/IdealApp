@@ -13,7 +13,7 @@ const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 router.post('/send', async (req, res, next) => {
   try {
-    const { emailIds, investorName, firm, customIntro, dataRoomLink } = req.body;
+    const { emailIds, investorName, firm, customIntro, dataRoomLink, roomToken } = req.body;
     
     if (!emailIds || !dataRoomLink) {
       return res.status(400).json({ error: "Missing required fields: emailIds, dataRoomLink." });
@@ -22,8 +22,7 @@ router.post('/send', async (req, res, next) => {
     const htmlContent = `
       <p>Hi ${investorName || 'there'},</p>
       ${customIntro ? `<p>${customIntro}</p>` : ''}
-      <p>I've put together a data room for you to review here:</p>
-      <p><a href="${dataRoomLink}"><strong>View Pitch Package & Data Room</strong></a></p>
+      <p>View your full data room here: <a href="${dataRoomLink}"><strong>${dataRoomLink}</strong></a></p>
       <p>Best regards,<br/>[(req as any).user.email]</p>
     `;
 
@@ -56,6 +55,7 @@ router.post('/send', async (req, res, next) => {
         docsViewed: 0,
         status: "Sent",
         dataRoomLink,
+        roomToken: roomToken || null,
         emailSentTo: email
       });
       outreachDocs.push(docRef.id);

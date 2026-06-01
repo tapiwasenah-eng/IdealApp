@@ -4,6 +4,7 @@ import { designSystem } from "../../../lib/design-system";
 
 export const InvestorFiltersPanel: React.FC = () => {
   const { colors, typography } = designSystem;
+  const { filters, setFilters } = useInvestorStore();
 
   return (
     <div
@@ -70,21 +71,31 @@ export const InvestorFiltersPanel: React.FC = () => {
           </div>
         </div>
 
-        {/* Mock slider for Check Size */}
         <div>
           <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
             Check Size ($M)
           </h4>
           <input
             type="range"
-            min="0.1"
-            max="10"
-            step="0.1"
+            min="0"
+            max="20"
+            step="0.5"
+            value={filters.checkSizeMax / 1000000}
+            onChange={(e) =>
+              setFilters({
+                checkSizeMax: parseFloat(e.target.value) * 1000000,
+              })
+            }
             className="w-full accent-indigo-600"
           />
           <div className="flex justify-between text-xs text-slate-400 mt-1">
-            <span>$100k</span>
-            <span>$10M+</span>
+            <span>Any</span>
+            <span>
+              Up to $
+              {filters.checkSizeMax >= 20000000
+                ? "20M+"
+                : (filters.checkSizeMax / 1000000).toFixed(1) + "M"}
+            </span>
           </div>
         </div>
       </div>
