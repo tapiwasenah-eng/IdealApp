@@ -172,6 +172,20 @@ service cloud.firestore {
       match /projects/{projectId} {
         allow read, write: if isOwner(userId) || isAdmin();
       }
+      
+      // Documents Subcollection
+      match /documents/{documentId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+        
+        match /sections/{sectionId} {
+          allow read, write: if isOwner(userId) || isAdmin();
+        }
+      }
+
+      // Outreach Subcollection
+      match /outreach/{outreachId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
     }
 
     // Documents
@@ -224,6 +238,13 @@ service cloud.firestore {
       allow update: if (isAuthenticated() && (resource.data.ownerId == request.auth.uid || isAdmin())) || 
                        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount', 'accessLog', 'updatedAt']) && request.resource.data.viewCount == resource.data.viewCount + 1);
       allow delete: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || isAdmin());
+    }
+
+    // Data Room Views
+    match /dataRoomViews/{viewId} {
+      allow read: if isOwner(resource.data.ownerId) || isAdmin();
+      allow create: if true; // Publicly writable for tracking
+      allow update, delete: if isOwner(resource.data.ownerId) || isAdmin();
     }
 
     // Invites

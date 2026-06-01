@@ -10,6 +10,7 @@ export const AIChatRail: React.FC = () => {
   const { messages, isTyping, sendMessage, suggestedChips, applyToSection } =
     useAIChat(activeSectionId);
   const [inputText, setInputText] = useState("");
+  const inputRef = React.useRef<HTMLTextAreaElement>(null);
 
   if (investorView) return null;
 
@@ -17,6 +18,14 @@ export const AIChatRail: React.FC = () => {
     if (!inputText.trim()) return;
     sendMessage(inputText.trim());
     setInputText("");
+  };
+
+  const handleChipClick = (chip: string) => {
+    const text = chip.replace(" \u2192", "");
+    setInputText(text);
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
   };
 
   return (
@@ -158,7 +167,7 @@ export const AIChatRail: React.FC = () => {
           {suggestedChips.map((chip) => (
             <button
               key={chip}
-              onClick={() => setInputText(chip.replace(" \u2192", ""))}
+              onClick={() => handleChipClick(chip)}
               className="whitespace-nowrap px-3 py-1.5 rounded-full border border-slate-200 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
               style={{ fontFamily: typography.fonts.interface }}
             >
@@ -169,6 +178,7 @@ export const AIChatRail: React.FC = () => {
 
         <div className="relative">
           <textarea
+            ref={inputRef}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => {

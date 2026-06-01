@@ -22,13 +22,17 @@ export const useAIChat = (activeSectionId: string | null) => {
   const activeMessageIdRef = useRef<string | null>(null);
 
   const getSuggestedChips = () => {
-    if (!activeSectionId)
-      return ["Suggest a new section", "Check document health"];
+    if (!activeSectionId) {
+      return [
+        "Summarize this document for investors",
+        "Highlight key risks and mitigations"
+      ];
+    }
     return [
-      "Make more compelling \u2192",
-      "Add market data \u2192",
-      "Add customer quote \u2192",
-      "Simplify language \u2192",
+      "Flesh out the market analysis",
+      "Make this section more formal",
+      "Simplify language",
+      "Highlight key risks and mitigations"
     ];
   };
 

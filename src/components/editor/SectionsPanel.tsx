@@ -1,6 +1,6 @@
 import React from 'react';
 import { useEditorStore } from '../../store/editorStore';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { GripVertical, Plus, Copy, Trash2, LayoutTemplate } from 'lucide-react';
 import { nanoid } from 'nanoid';
 

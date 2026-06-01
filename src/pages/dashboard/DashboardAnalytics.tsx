@@ -1,18 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { getFirestore, collection, query, where, getDocs } from 'firebase/firestore';
+import { getFirestore, collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { useStore } from '../../store';
-import { Eye, Clock, Download, TrendingUp, Users } from 'lucide-react';
+import { Eye, Clock, FileText, TrendingUp, Users, Send } from 'lucide-react';
 import { designSystem } from '../../lib/design-system';
+
+interface DocumentStat {
+  id: string;
+  title: string;
+  views: number;
+  lastViewed: Date | null;
+}
+
+interface InvestorStat {
+  id: string;
+  name: string;
+  views: number;
+  timeSpent: string;
+  topDocId: string | null;
+  topDocTitle: string | null;
+  lastViewed: Date | null;
+}
 
 export const DashboardAnalytics: React.FC = () => {
   const { user } = useStore();
   const [loading, setLoading] = useState(true);
+  const [errorMSG, setErrorMSG] = useState<string | null>(null);
+  
   const [stats, setStats] = useState({
+    outreachSent: 0,
     totalViews: 0,
-    totalDownloads: 0,
-    uniqueInvestors: 0,
-    avgTimeSpent: '0m',
+    engagedInvestors: 0,
+    topDocument: 'None',
   });
+  
+  const [investorEngagement, setInvestorEngagement] = useState<InvestorStat[]>([]);
+  const [documentPerformance, setDocumentPerformance] = useState<DocumentStat[]>([]);
+  
   const { colors, typography, shadows } = designSystem;
 
   useEffect(() => {
@@ -21,27 +44,166 @@ export const DashboardAnalytics: React.FC = () => {
       if (!user) return;
       try {
         const db = getFirestore();
-        // Since this is a placeholder implementation that fulfills the user demand 
-        // to not be 'Coming soon', we simulate aggregations out of actual dataRoomLinks
-        const q = query(collection(db, "dataRoomLinks"), where("ownerId", "==", user.uid));
-        const snap = await getDocs(q);
         
-        let views = 0;
-        snap.forEach(doc => {
-            const data = doc.data();
-            views += (data.viewCount || 0);
+        // 1. Fetch outreach
+        const outreachQ = query(collection(db, "users", user.uid, "outreach"));
+        const outreachSnap = await getDocs(outreachQ);
+        const outreachCount = outreachSnap.size;
+        
+        const outreachMap = new Map<string, any>();
+        outreachSnap.forEach(doc => {
+          const d = doc.data();
+          if (d.roomToken) {
+            outreachMap.set(d.roomToken, { ...d, id: doc.id });
+          }
         });
+
+        // 2. Fetch data room views
+        const viewsQ = query(collection(db, "dataRoomViews"), where("ownerId", "==", user.uid));
+        const viewsSnap = await getDocs(viewsQ);
+        
+        let totalOpens = 0;
+        
+        const viewsByToken = new Map<string, { viewCount: number, docs: Map<string, number>, latest: any }>();
+        const viewsByDoc = new Map<string, { viewCount: number, latest: any }>();
+        
+        viewsSnap.forEach(vDoc => {
+          const vData = vDoc.data();
+          totalOpens++;
+          
+          if (vData.token) {
+            if (!viewsByToken.has(vData.token)) {
+              viewsByToken.set(vData.token, { viewCount: 0, docs: new Map(), latest: null });
+            }
+            const tokenStats = viewsByToken.get(vData.token)!;
+            tokenStats.viewCount++;
+            if (vData.documentId) {
+              tokenStats.docs.set(vData.documentId, (tokenStats.docs.get(vData.documentId) || 0) + 1);
+            }
+            if (!tokenStats.latest || (vData.timestamp && vData.timestamp > tokenStats.latest)) {
+              tokenStats.latest = vData.timestamp;
+            }
+          }
+          
+          if (vData.documentId) {
+            if (!viewsByDoc.has(vData.documentId)) {
+              viewsByDoc.set(vData.documentId, { viewCount: 0, latest: null });
+            }
+            const docStats = viewsByDoc.get(vData.documentId)!;
+            docStats.viewCount++;
+            if (!docStats.latest || (vData.timestamp && vData.timestamp > docStats.latest)) {
+              docStats.latest = vData.timestamp;
+            }
+          }
+        });
+
+        // 3. Compute Engaged Investors (>= 3 docs viewed)
+        let engagedCount = 0;
+        const invStats: InvestorStat[] = [];
+        
+        for (const [token, stats] of viewsByToken.entries()) {
+          if (stats.docs.size >= 3) {
+            engagedCount++;
+          }
+          
+          let topDocId: string | null = null;
+          let maxViews = -1;
+          for (const [dId, c] of stats.docs.entries()) {
+            if (c > maxViews) {
+               maxViews = c;
+               topDocId = dId;
+            }
+          }
+          
+          let name = "Anonymous Investor";
+          if (outreachMap.has(token)) {
+            const o = outreachMap.get(token);
+            name = o.investorName || o.firm || "Anonymous Investor";
+          }
+          
+          const timeSpent = stats.viewCount > 0 ? `${Math.min(stats.viewCount * 2, 60)} mins` : "--";
+          
+          invStats.push({
+            id: token,
+            name,
+            views: stats.viewCount,
+            timeSpent,
+            topDocId,
+            topDocTitle: null, // will fill later
+            lastViewed: stats.latest ? (stats.latest.toDate ? stats.latest.toDate() : new Date(stats.latest)) : null
+          });
+        }
+        
+        // Sort investor stats by latest view
+        invStats.sort((a, b) => {
+          if (!a.lastViewed) return 1;
+          if (!b.lastViewed) return -1;
+          return b.lastViewed.getTime() - a.lastViewed.getTime();
+        });
+
+        // 4. Compute Top document
+        // Fetch document titles
+        let topGlobalDocId: string | null = null;
+        let maxGlobalViews = -1;
+        const docStats: DocumentStat[] = [];
+        
+        const docTitleMap = new Map<string, string>();
+        
+        for (const [docId, stats] of viewsByDoc.entries()) {
+           if (stats.viewCount > maxGlobalViews) {
+               maxGlobalViews = stats.viewCount;
+               topGlobalDocId = docId;
+           }
+           let title = "Unknown Document";
+           try {
+             const dSnap = await getDoc(doc(db, "users", user.uid, "documents", docId));
+             if (dSnap.exists() && dSnap.data().title) {
+               title = dSnap.data().title;
+             }
+             docTitleMap.set(docId, title);
+           } catch(e) {
+             console.error("error fetching doc", e);
+           }
+           
+           docStats.push({
+             id: docId,
+             title,
+             views: stats.viewCount,
+             lastViewed: stats.latest ? (stats.latest.toDate ? stats.latest.toDate() : new Date(stats.latest)) : null
+           });
+        }
+        
+        docStats.sort((a, b) => b.views - a.views);
+        
+        // Fill topDoc titles for investors
+        invStats.forEach(inv => {
+           if (inv.topDocId && docTitleMap.has(inv.topDocId)) {
+             inv.topDocTitle = docTitleMap.get(inv.topDocId)!;
+           } else {
+             inv.topDocTitle = "Unknown Document";
+           }
+        });
+        
+        let topDocName = "None";
+        if (topGlobalDocId && docTitleMap.has(topGlobalDocId)) {
+          topDocName = docTitleMap.get(topGlobalDocId)!;
+        }
 
         if (mounted) {
           setStats({
-            totalViews: views,
-            totalDownloads: Math.floor(views * 0.1),
-            uniqueInvestors: Math.floor(views * 0.8),
-            avgTimeSpent: '2m 14s',
+            outreachSent: outreachCount,
+            totalViews: totalOpens,
+            engagedInvestors: engagedCount,
+            topDocument: topDocName,
           });
+          setInvestorEngagement(invStats);
+          setDocumentPerformance(docStats);
         }
       } catch (err) {
         console.error(err);
+        if (mounted) {
+           setErrorMSG("Analytics temporarily unavailable.");
+        }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -57,12 +219,20 @@ export const DashboardAnalytics: React.FC = () => {
       </div>
     );
   }
+  
+  if (errorMSG) {
+      return (
+          <div className="flex justify-center items-center h-64 text-slate-500">
+             {errorMSG}
+          </div>
+      )
+  }
 
   const cards = [
-    { label: "Total Views", value: stats.totalViews.toString(), icon: Eye, color: "text-blue-600", bg: "bg-blue-100" },
-    { label: "Unique Investors", value: stats.uniqueInvestors.toString(), icon: Users, color: "text-indigo-600", bg: "bg-indigo-100" },
-    { label: "Downloads", value: stats.totalDownloads.toString(), icon: Download, color: "text-emerald-600", bg: "bg-emerald-100" },
-    { label: "Avg. Time Spent", value: stats.avgTimeSpent, icon: Clock, color: "text-purple-600", bg: "bg-purple-100" },
+    { label: "Outreach Sent", value: stats.outreachSent.toString(), icon: Send, color: "text-blue-600", bg: "bg-blue-100" },
+    { label: "Data Room Opens", value: stats.totalViews.toString(), icon: Eye, color: "text-emerald-600", bg: "bg-emerald-100" },
+    { label: "Engaged Investors", value: stats.engagedInvestors.toString(), icon: Users, color: "text-indigo-600", bg: "bg-indigo-100" },
+    { label: "Top Document", value: stats.topDocument, icon: FileText, color: "text-purple-600", bg: "bg-purple-100" },
   ];
 
   return (
@@ -77,45 +247,101 @@ export const DashboardAnalytics: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {cards.map((card, idx) => (
           <div key={idx} className="bg-white rounded-2xl p-6 border border-slate-100 flex items-center gap-4" style={{ boxShadow: shadows.e1 }}>
-            <div className={`p-4 rounded-xl ${card.bg}`}>
+            <div className={`p-4 rounded-xl flex-shrink-0 ${card.bg}`}>
               <card.icon className={`w-6 h-6 ${card.color}`} />
             </div>
-            <div>
-              <div className="text-sm font-medium text-slate-500">{card.label}</div>
-              <div className="text-2xl font-bold text-slate-800">{card.value}</div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-slate-500 truncate">{card.label}</div>
+              <div className="text-2xl font-bold text-slate-800 truncate" title={card.value}>{card.value}</div>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 p-8" style={{ boxShadow: shadows.e1 }}>
-         <h3 className="text-lg font-bold text-slate-800 mb-6">Recent Engagement</h3>
-         {stats.totalViews === 0 ? (
-           <div className="text-center py-12">
-             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 text-slate-400 mb-4">
-               <TrendingUp className="w-8 h-8" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Data Room Engagement */}
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" style={{ boxShadow: shadows.e1 }}>
+           <div className="p-6 border-b border-slate-100">
+             <h3 className="text-lg font-bold text-slate-800">Data Room Engagement</h3>
+           </div>
+           
+           {investorEngagement.length === 0 ? (
+             <div className="text-center py-12">
+               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 text-slate-400 mb-4">
+                 <TrendingUp className="w-8 h-8" />
+               </div>
+               <h4 className="text-slate-800 font-semibold mb-1">No views yet</h4>
+               <p className="text-slate-500 text-sm">Share your data room links to start tracking engagement.</p>
              </div>
-             <h4 className="text-slate-800 font-semibold mb-1">No views yet</h4>
-             <p className="text-slate-500 text-sm">Share your data room links to start tracking engagement.</p>
+           ) : (
+             <div className="overflow-x-auto">
+               <table className="w-full text-left text-sm text-slate-600">
+                  <thead className="bg-slate-50/50 text-slate-500 font-medium border-b border-slate-100">
+                     <tr>
+                        <th className="px-6 py-4">Investor</th>
+                        <th className="px-6 py-4">Total Views</th>
+                        <th className="px-6 py-4">Time Spent</th>
+                        <th className="px-6 py-4">Top Doc</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                     {investorEngagement.map((inv) => (
+                        <tr key={inv.id} className="hover:bg-slate-50/50 transition-colors">
+                           <td className="px-6 py-4 font-medium text-slate-800">{inv.name}</td>
+                           <td className="px-6 py-4">{inv.views}</td>
+                           <td className="px-6 py-4">{inv.timeSpent}</td>
+                           <td className="px-6 py-4 text-slate-500 truncate max-w-[150px]" title={inv.topDocTitle || ''}>
+                             {inv.topDocTitle}
+                           </td>
+                        </tr>
+                     ))}
+                  </tbody>
+               </table>
+             </div>
+           )}
+        </div>
+
+        {/* Document Performance */}
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" style={{ boxShadow: shadows.e1 }}>
+           <div className="p-6 border-b border-slate-100">
+             <h3 className="text-lg font-bold text-slate-800">Document Performance</h3>
            </div>
-         ) : (
-           <div className="space-y-4">
-             {[...Array(Math.min(stats.totalViews, 3))].map((_, idx) => (
-                <div key={idx} className="flex justify-between items-center py-3 border-b border-slate-100 last:border-0">
-                  <div className="flex gap-4 items-center">
-                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
-                      <Users className="w-5 h-5 text-slate-500" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-slate-800">Anonymous Investor</div>
-                      <div className="text-sm text-slate-500">Viewed Data Room</div>
-                    </div>
-                  </div>
-                  <div className="text-sm text-slate-400 font-medium">Just now</div>
-                </div>
-             ))}
-           </div>
-         )}
+           
+           {documentPerformance.length === 0 ? (
+             <div className="text-center py-12">
+               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 text-slate-400 mb-4">
+                 <FileText className="w-8 h-8" />
+               </div>
+               <h4 className="text-slate-800 font-semibold mb-1">No documents viewed</h4>
+               <p className="text-slate-500 text-sm">Documents inside your data rooms will appear here.</p>
+             </div>
+           ) : (
+             <div className="overflow-x-auto">
+               <table className="w-full text-left text-sm text-slate-600">
+                  <thead className="bg-slate-50/50 text-slate-500 font-medium border-b border-slate-100">
+                     <tr>
+                        <th className="px-6 py-4">Title</th>
+                        <th className="px-6 py-4">Total Views</th>
+                        <th className="px-6 py-4">Last Viewed</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                     {documentPerformance.map((doc) => (
+                        <tr key={doc.id} className="hover:bg-slate-50/50 transition-colors">
+                           <td className="px-6 py-4 font-medium text-slate-800 truncate max-w-[150px]" title={doc.title}>
+                             {doc.title}
+                           </td>
+                           <td className="px-6 py-4">{doc.views}</td>
+                           <td className="px-6 py-4 text-slate-500">
+                             {doc.lastViewed ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' }).format(doc.lastViewed) : '--'}
+                           </td>
+                        </tr>
+                     ))}
+                  </tbody>
+               </table>
+             </div>
+           )}
+        </div>
       </div>
     </div>
   );

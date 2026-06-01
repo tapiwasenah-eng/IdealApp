@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { db, auth } from "../firebase";
 import { doc, getDoc, setDoc, collection, getDocs, writeBatch, Timestamp } from "firebase/firestore";
 import toast from "react-hot-toast";
+import { useCompanyDNAStore } from "./useCompanyDNAStore";
 
 export interface DocumentSection {
   id: string;
@@ -18,6 +19,9 @@ export interface DocumentState {
   type: string;
   sections: DocumentSection[];
   sectionOrder?: string[];
+  templateId?: string;
+  industry?: string;
+  category?: string;
 }
 
 interface DocumentStore {
@@ -140,22 +144,42 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   createDocumentFromTemplate: async (templateId, template) => {
     const user = auth.currentUser;
     if (!user) throw new Error("Not authenticated");
+    
+    // Fetch user DNA to hydrate template variables
+    const dnaStatus = useCompanyDNAStore.getState();
+    const dna = dnaStatus.dna;
+    const companyName = dna.identity?.name || "My Company";
+    
+    // Simple hydrated helper
+    const hydrate = (text: string) => {
+      if (!text) return "";
+      let res = text;
+      res = res.replace(/\{\{company_name\}\}/g, companyName);
+      res = res.replace(/\{\{tagline\}\}/g, dna.identity?.tagline || "Your Company Tagline");
+      res = res.replace(/\{\{problem_statement\}\}/g, "problem statement"); // simplistic fill
+      res = res.replace(/\{\{industry_name\}\}/g, template.industry || "industry");
+      res = res.replace(/\{\{date\}\}/g, new Date().toLocaleDateString());
+      return res;
+    };
 
     const newId = Date.now().toString();
     const sections: DocumentSection[] = template.sections ? template.sections.map((s: any, idx: number) => ({
       id: s.id || `s-${idx}`,
-      title: s.heading || "Untitled Section",
-      content: s.body || "",
+      title: hydrate(s.heading) || "Untitled Section",
+      content: hydrate(s.body) || "",
       status: "empty"
     })) : [{ id: "1", title: "Introduction", content: "", status: "empty" }];
 
     const newDoc: DocumentState = {
       id: newId,
       title: `Untitled ${template.name}`,
-      companyName: "My Company",
+      companyName: companyName,
       type: template.category || template.name,
       sections: sections,
-      sectionOrder: sections.map(s => s.id)
+      sectionOrder: sections.map(s => s.id),
+      templateId: template.id,
+      industry: template.industry || '',
+      category: template.category || ''
     };
 
     try {
