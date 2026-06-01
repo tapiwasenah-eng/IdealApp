@@ -172,24 +172,6 @@ service cloud.firestore {
       match /projects/{projectId} {
         allow read, write: if isOwner(userId) || isAdmin();
       }
-      
-      // Documents Subcollection
-      match /documents/{docId} {
-        allow get, list: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) && isValidDocument(request.resource.data);
-        allow update: if isOwner(userId) || isAdmin();
-        allow delete: if isOwner(userId) || isAdmin();
-        
-        // Sections Subcollection
-        match /sections/{sectionId} {
-          allow read, write: if isOwner(userId) || isAdmin();
-        }
-      }
-
-      // Outreach Subcollection
-      match /outreach/{outreachId} {
-        allow read, write: if isOwner(userId) || isAdmin();
-      }
     }
 
     // Documents
@@ -242,13 +224,6 @@ service cloud.firestore {
       allow update: if (isAuthenticated() && (resource.data.ownerId == request.auth.uid || isAdmin())) || 
                        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount', 'accessLog', 'updatedAt']) && request.resource.data.viewCount == resource.data.viewCount + 1);
       allow delete: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || isAdmin());
-    }
-
-    // Data Room Views (Analytics)
-    match /dataRoomViews/{viewId} {
-      allow read: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
-      // We don't allow public creation here directly. It is handled by the backend server route in dataRoom.ts.
-      allow write: if isAdmin(); 
     }
 
     // Invites
