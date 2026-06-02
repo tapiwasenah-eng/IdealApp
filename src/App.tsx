@@ -14,7 +14,7 @@ const FeaturesPage = lazy(() => import('./pages/FeaturesPage'))
 const PerksPage = lazy(() => import('./pages/PerksPage'))
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const EditorPage = lazy(() => import('./pages/EditorPage'))
-const TemplatesPage = lazy(() => import('./pages/TemplatesPage'))
+import TemplatesPage from './pages/TemplatesPage'
 const TemplateDetailPage = lazy(() => import('./pages/TemplateDetailPage'))
 const TutorialsPage = lazy(() => import('./pages/TutorialsPage'))
 const DocumentationPage = lazy(() => import('./pages/DocumentationPage'))

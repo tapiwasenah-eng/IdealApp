@@ -3,6 +3,7 @@ import { db, auth } from "../firebase";
 import { doc, getDoc, setDoc, collection, getDocs, writeBatch, Timestamp } from "firebase/firestore";
 import toast from "react-hot-toast";
 import { useCompanyDNAStore } from "./useCompanyDNAStore";
+import { useStore } from "../../store";
 
 export interface DocumentSection {
   id: string;
@@ -142,8 +143,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   createDocumentFromTemplate: async (templateId, template) => {
-    const user = auth.currentUser;
-    if (!user) throw new Error("Not authenticated");
+    const { user } = useStore.getState();
+    if (!user || !user.uid) {
+      toast.error("User must be authenticated to create a document.");
+      throw new Error("Not authenticated");
+    }
     
     // Fetch user DNA to hydrate template variables
     const dnaStatus = useCompanyDNAStore.getState();
@@ -200,7 +204,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       docCache[newId] = newDoc;
       return newId;
     } catch (error) {
-      console.error("Error creating document:", error);
+      console.error("[DocumentCreation] Firestore error", {
+        code: (error as any)?.code,
+        message: (error as any)?.message,
+        path: `users/${user.uid}/documents`
+      });
       toast.error("Failed to create document.");
       throw error;
     }
@@ -236,14 +244,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   saveSectionToFirestore: async (docId, id, content, status) => {
-    const user = auth.currentUser;
-    if (!user) return;
+    const { user } = useStore.getState();
+    if (!user || !user.uid) return;
     
     try {
       const secRef = doc(db, "users", user.uid, "documents", docId, "sections", id);
       await setDoc(secRef, { content, status }, { merge: true });
     } catch (e: any) {
-      console.error("Failed to save section:", e);
+      console.error("[DocumentCreation] Failed to save section:", e);
       toast.error("Failed to save your recent edits.");
     }
   },

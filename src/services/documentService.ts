@@ -84,13 +84,18 @@ export async function createDocument(params: {
   content?: any;
   status?: 'draft' | 'generating' | 'complete' | 'error' | 'in_progress' | 'completed';
 }): Promise<DocumentRecord> {
-  const path = `users/${params.userId}/documents`;
+  const { user } = useStore.getState();
+  if (!user || !user.uid) {
+    throw new Error("User must be authenticated to create a document.");
+  }
+  const userId = params.userId || user.uid;
+  const path = `users/${userId}/documents`;
   try {
     const parentRef = await addDoc(collection(db, path), {
       title: params.title,
       type: params.type,
       status: params.status ?? 'draft',
-      ownerId: params.userId,
+      ownerId: userId,
       collaborators: [],
       canvasJSON: params.canvasJSON ?? null,
       content: params.content ?? null,
@@ -123,6 +128,11 @@ export async function createDocument(params: {
     const snap = await getDoc(parentRef);
     return docToRecord(snap.data()!, parentRef.id);
   } catch (error) {
+    console.error("[DocumentCreation] Firestore error", {
+      code: (error as any)?.code,
+      message: (error as any)?.message,
+      path: path
+    });
     return handleFirestoreError(error, OperationType.CREATE, path);
   }
 }
