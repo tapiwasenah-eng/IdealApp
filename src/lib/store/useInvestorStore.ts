@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { db, auth } from "../firebase";
 import { collection, query, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
+import { useStore } from "../../store";
 
 export interface Investor {
   id: string;
@@ -50,8 +51,8 @@ export const useInvestorStore = create<InvestorStore>((set, get) => ({
   loadInvestors: async () => {
     set({ isLoading: true });
     try {
-      const user = auth.currentUser;
-      if (!user) {
+      const { user } = useStore.getState();
+      if (!user || !user.uid) {
         set({ investors: [], isLoading: false });
         return;
       }

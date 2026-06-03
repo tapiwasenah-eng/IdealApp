@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Link from '@tiptap/extension-link';
 import { designSystem } from '../../lib/design-system';
 
 interface SectionEditorProps {
@@ -19,11 +18,11 @@ export const SectionEditor: React.FC<SectionEditorProps> = ({ content, onChange,
         heading: {
           levels: [1, 2, 3],
         },
-      }),
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: {
-          class: 'text-indigo-600 hover:text-indigo-800 underline',
+        link: {
+          openOnClick: false,
+          HTMLAttributes: {
+            class: 'text-indigo-600 hover:text-indigo-800 underline',
+          },
         },
       }),
     ],

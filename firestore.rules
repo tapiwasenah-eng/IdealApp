@@ -60,6 +60,11 @@ service cloud.firestore {
       }
     }
     
+    match /investors/{investorId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+    
     function isValidDataRoomLink(data) {
       return data.keys().hasAll(['token', 'ownerId', 'hasPassword', 'allowDownload', 'viewCount'])
         && data.token is string && data.token.size() <= 128

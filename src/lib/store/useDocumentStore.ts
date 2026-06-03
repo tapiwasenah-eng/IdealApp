@@ -18,6 +18,7 @@ export interface DocumentState {
   title: string;
   companyName: string;
   type: string;
+  originalPrompt?: string;
   sections: DocumentSection[];
   sectionOrder?: string[];
   templateId?: string;
@@ -31,6 +32,7 @@ interface DocumentStore {
   activeSectionId: string | null;
   investorView: boolean;
   isLoading: boolean;
+  history: Array<{ sectionId: string, content: string }[]>;
   loadAllDocuments: () => Promise<void>;
   loadDocument: (id: string) => Promise<void>;
   createDocumentFromTemplate: (templateId: string, template: any) => Promise<string>;
@@ -40,6 +42,7 @@ interface DocumentStore {
   setInvestorView: (view: boolean) => void;
   reorderSections: (startIndex: number, endIndex: number) => void;
   addSection: (title: string) => void;
+  undoAction: (docId: string) => void;
 }
 
 // In-memory cache for fast switching during session
@@ -52,6 +55,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   activeSectionId: null,
   investorView: false,
   isLoading: false,
+  history: [],
 
   loadAllDocuments: async () => {
     set({ isLoading: true });
@@ -223,12 +227,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set((state) => {
       if (!state.document) return state;
       currentDocId = state.document.id;
+      
+      const currentState = state.document.sections.map(s => ({
+        sectionId: s.id,
+        content: s.content
+      }));
+      
+      const newHistory = [...state.history, currentState].slice(-20); // Keep last 20 states
+      
       const newSections: DocumentSection[] = state.document.sections.map((s) =>
         s.id === id ? { ...s, content, status } : s
       );
       const updatedDoc = { ...state.document, sections: newSections };
       docCache[updatedDoc.id] = updatedDoc;
-      return { document: updatedDoc };
+      return { document: updatedDoc, history: newHistory };
     });
 
     if (!currentDocId) return;
@@ -293,6 +305,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         status: "empty",
       };
       
+      const currentState = state.document.sections.map(s => ({
+        sectionId: s.id,
+        content: s.content
+      }));
+      const newHistory = [...state.history, currentState].slice(-20);
+
       const newSections = [...state.document.sections, newSection];
       const newOrder = newSections.map(s => s.id);
       
@@ -319,8 +337,26 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
          });
       }
 
-      return { document: updatedDoc };
+      return { document: updatedDoc, history: newHistory };
     });
   },
+
+  undoAction: (docId: string) => {
+    set((state) => {
+      if (!state.document || state.document.id !== docId || state.history.length === 0) return state;
+      
+      const previousState = state.history[state.history.length - 1];
+      const newHistory = state.history.slice(0, -1);
+      
+      const newSections = state.document.sections.map(sec => {
+        const prevSec = previousState.find(p => p.sectionId === sec.id);
+        return prevSec ? { ...sec, content: prevSec.content } : sec;
+      });
+      
+      const updatedDoc = { ...state.document, sections: newSections };
+      docCache[updatedDoc.id] = updatedDoc;
+      return { document: updatedDoc, history: newHistory };
+    });
+  }
 }));
 

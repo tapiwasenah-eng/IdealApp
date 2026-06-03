@@ -7,6 +7,7 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import toast from 'react-hot-toast';
 import ReactMarkdown from 'react-markdown';
+import { useDocumentStore } from '../lib/store/useDocumentStore';
 
 // Hardcode relative URI to prevent any Vite env misconfigurations returning HTML (Vite index.html)
 const API_URL = '/api';
@@ -73,9 +74,20 @@ export default function GenerateDocumentPage() {
 
     const attemptGeneration = async (): Promise<any> => {
       try {
+        let token = '';
+        if (user) {
+          const { auth } = await import('../lib/firebase');
+          if (auth.currentUser) {
+            token = await auth.currentUser.getIdToken();
+          }
+        }
+        
         const response = await fetch(`${API_URL}/generate-document`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
           body: JSON.stringify({
             documentType: formData.documentType,
             companyName: formData.companyName,
@@ -138,15 +150,36 @@ export default function GenerateDocumentPage() {
       toast.dismiss('retry-toast');
       toast.success('Document created!', { id: 'gen-toast' });
 
-      // Parse AI response into structured sections
-      const sections = parseContentIntoSections(result.content, formData.documentType);
+      // Parse AI response into structured sections mapping JSON directly
+      let structuredJson;
+      try {
+        let contentToParse = result.content;
+        if (typeof contentToParse === 'string') {
+           contentToParse = contentToParse.replace(/^```json/im, '').replace(/```$/m, '').trim();
+           structuredJson = JSON.parse(contentToParse);
+        } else {
+           structuredJson = contentToParse;
+        }
+      } catch (e) {
+        console.error("Failed to parse JSON, falling back", e);
+        structuredJson = { sections: [] };
+      }
+
+      const sections = (structuredJson.sections || []).map((sec: any, idx: number) => ({
+        id: nanoid(),
+        title: sec.title || 'Untitled Section',
+        content: sec.content || '<p>No content yet</p>',
+        status: 'complete',
+        order: idx
+      }));
 
       // Create document in local state first
       const docId = nanoid();
       const documentData = {
         id: docId,
-        title: `${formData.companyName || 'Untitled'} - ${formData.documentType}`,
+        title: structuredJson.title || `${formData.companyName || 'Untitled'} - ${formData.documentType}`,
         type: formData.documentType,
+        originalPrompt: formData.description,
         sections,
         ownerId: user ? user.uid : 'anonymous',
         status: 'draft',
@@ -159,7 +192,7 @@ export default function GenerateDocumentPage() {
       // Auto-save if logged in
       if (user) {
          try {
-             await setDoc(doc(db, 'documents', docId), {
+             await setDoc(doc(db, 'users', user.uid, 'documents', docId), {
                  ...documentData,
                  createdAt: serverTimestamp(),
                  updatedAt: serverTimestamp()
@@ -199,24 +232,33 @@ export default function GenerateDocumentPage() {
 
   const handleEdit = () => {
     requireAuthAndExecute(() => {
-        navigate(`/editor/${generatedDoc.id}`);
+        if (!generatedDoc) return;
+        
+        // Cache the document globally so the Workspace layout picks it up instantly
+        useDocumentStore.setState({
+           document: generatedDoc,
+           activeSectionId: generatedDoc.sections?.[0]?.id || null,
+        });
+
+        navigate(`/documents/${generatedDoc.id}`);
     });
   };
 
   const handleDownload = () => {
-    requireAuthAndExecute(() => {
-        const fullText = generatedDoc.sections.map((s: any) => `## ${s.title}\n\n${s.body}`).join('\n\n');
-        const blob = new Blob([fullText], { type: 'text/markdown' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${generatedDoc.title}.md`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        toast.success('Document downloaded!');
-    });
+     if (!generatedDoc) return;
+     
+     // Download happens fully client-side without backend calls
+     const fullText = generatedDoc.sections.map((s: any) => `## ${s.title}\n\n${s.content || s.body || ''}`).join('\n\n');
+     const blob = new Blob([fullText], { type: 'text/markdown' });
+     const url = URL.createObjectURL(blob);
+     const a = document.createElement('a');
+     a.href = url;
+     a.download = `${generatedDoc.title || 'Document'}.md`;
+     document.body.appendChild(a);
+     a.click();
+     document.body.removeChild(a);
+     URL.revokeObjectURL(url);
+     toast.success('Document downloaded!');
   };
 
   const handleSaveToProjects = async () => {
@@ -226,16 +268,25 @@ export default function GenerateDocumentPage() {
        return;
     }
     
-    // It should already be auto-saved, but we can double check
+    if (!generatedDoc) return;
+    
+    // It should already be auto-saved, but ensure it's durably written
     try {
-        await setDoc(doc(db, 'documents', generatedDoc.id), {
+        await setDoc(doc(db, 'users', user.uid, 'documents', generatedDoc.id), {
              ...generatedDoc,
              ownerId: user.uid,
              createdAt: serverTimestamp(),
              updatedAt: serverTimestamp()
-        });
+        }, { merge: true });
+        
+        // Trigger a refresh so it shows immediately
+        const store = useDocumentStore.getState();
+        if (store.loadAllDocuments) {
+            store.loadAllDocuments();
+        }
+        
         toast.success('Saved securely to My Projects!');
-        navigate('/solutions'); // Or wherever projects are listed
+        navigate('/dashboard/documents'); 
     } catch (err: any) {
         toast.error('Failed to save to projects: ' + err.message);
     }
@@ -417,7 +468,7 @@ export default function GenerateDocumentPage() {
                        {generatedDoc.sections.map((sec: any, idx: number) => (
                            <div key={idx} className="mb-6">
                                <h2 className="text-2xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4">{sec.title}</h2>
-                               <ReactMarkdown>{sec.body}</ReactMarkdown>
+                               <div dangerouslySetInnerHTML={{ __html: sec.content || sec.body || '' }} />
                            </div>
                        ))}
                    </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getFirestore, collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { useStore } from '../../store';
 import { Eye, Clock, FileText, TrendingUp, Users, Send } from 'lucide-react';
 import { designSystem } from '../../lib/design-system';
@@ -43,8 +44,6 @@ export const DashboardAnalytics: React.FC = () => {
     const fetchAnalytics = async () => {
       if (!user) return;
       try {
-        const db = getFirestore();
-        
         // 1. Fetch outreach
         const outreachQ = query(collection(db, "users", user.uid, "outreach"));
         const outreachSnap = await getDocs(outreachQ);

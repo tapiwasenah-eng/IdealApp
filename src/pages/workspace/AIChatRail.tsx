@@ -8,7 +8,7 @@ export const AIChatRail: React.FC = () => {
   const { colors, typography, radii, shadows } = designSystem;
   const { activeSectionId, document, investorView } = useDocumentStore();
   const { messages, isTyping, sendMessage, suggestedChips, applyToSection } =
-    useAIChat(activeSectionId);
+    useAIChat();
   const [inputText, setInputText] = useState("");
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
 
@@ -16,7 +16,8 @@ export const AIChatRail: React.FC = () => {
 
   const handleSend = () => {
     if (!inputText.trim()) return;
-    sendMessage(inputText.trim());
+    const sectionTitle = activeSectionId && document?.sections ? document.sections.find((s: any) => s.id === activeSectionId)?.title : undefined;
+    sendMessage(inputText.trim(), sectionTitle || activeSectionId || undefined);
     setInputText("");
   };
 

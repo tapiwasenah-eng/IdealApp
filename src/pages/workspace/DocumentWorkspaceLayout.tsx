@@ -12,7 +12,7 @@ export const DocumentWorkspaceLayout: React.FC = () => {
   const { documentId } = useParams<{ documentId: string }>();
   const navigate = useNavigate();
   // Do not name local variables 'document' here; use 'docState' to avoid shadowing global document object
-  const { document: docState, loadDocument, investorView, setInvestorView } =
+  const { document: docState, loadDocument, investorView, setInvestorView, undoAction, history } =
     useDocumentStore();
   const { colors, typography, componentVariants } = designSystem;
 
@@ -93,6 +93,17 @@ export const DocumentWorkspaceLayout: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3 relative">
+          <button
+            onClick={() => {
+              if (docState) {
+                undoAction(docState.id);
+              }
+            }}
+            disabled={history.length === 0}
+            className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Undo
+          </button>
           <button
             onClick={() => setInvestorView(!investorView)}
             className={`px-3 py-1.5 text-sm font-semibold rounded-lg border transition-colors flex items-center gap-2 ${investorView ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"}`}

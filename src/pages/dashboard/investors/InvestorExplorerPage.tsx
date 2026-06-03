@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { useStore } from "../../../store";
 import { useInvestorStore } from "../../../lib/store/useInvestorStore";
 import { designSystem } from "../../../lib/design-system";
 import { InvestorFiltersPanel } from "./InvestorFiltersPanel";
@@ -8,13 +9,16 @@ import { PitchPackageBuilder } from "./PitchPackageBuilder";
 import { Search } from "lucide-react";
 
 export const InvestorExplorerPage: React.FC = () => {
+  const { user } = useStore();
   const { investors, selectedInvestorId, filters, setFilters, loadInvestors, isLoading } =
     useInvestorStore();
   const { colors, typography, shadows } = designSystem;
 
   useEffect(() => {
-    loadInvestors();
-  }, [loadInvestors]);
+    if (user?.uid) {
+      loadInvestors();
+    }
+  }, [loadInvestors, user?.uid]);
 
   const parseCheckSizeStr = (checkSizeStr: string) => {
     if (!checkSizeStr) return { min: 0, max: 0 };
