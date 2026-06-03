@@ -21,7 +21,7 @@ export const useAIChat = (documentId: string): UseAIChatResult => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
 
-  const { document: currentDocument, activeSectionId, updateSectionContent } = useDocumentStore();
+  const { currentDocument, activeSectionId, updateSectionContent } = useDocumentStore();
 
   const getSuggestedChips = () => {
     const defaultChips = [

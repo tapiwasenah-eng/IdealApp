@@ -5,7 +5,8 @@ import { motion, Variants, AnimatePresence } from 'framer-motion';
 import {
   Send, Lightbulb, LayoutDashboard, TrendingUp,
   Users, BarChart2, Move, Image as ImageIcon, FileText,
-  Heart, Loader2, Star, ChevronRight, Plus, Globe, Sparkles, ChevronDown
+  Heart, Loader2, Star, ChevronRight, Plus, Globe, Sparkles, ChevronDown,
+  Check, ArrowRight, Layers, Layout, Zap, Rocket, FileSpreadsheet, Slack, Calendar, Briefcase, Mail, Copy, Crown, ExternalLink
 } from 'lucide-react';
 import PageWrapper from '../components/layout/PageWrapper';
 import SEOHead from '../components/Shared/SEOHead';
@@ -17,9 +18,282 @@ import AuthModal from '../components/auth/AuthModal';
 import { BRAND_ASSETS } from '../lib/brandAssets';
 import { aiService } from '../services/aiService';
 import { exportService } from '../services/exportService';
-import { SleekHeroMockup } from '../components/home/SleekHero';
-import { TemplatesGallery } from '../components/home/TemplatesGallery';
-import { IntegrationTicker } from '../components/home/IntegrationTicker';
+// ── Component Definitions inserted inline ────────────────────────
+const STEPS = [
+  { id: 1, label: 'Research sources', color: 'bg-indigo-500' },
+  { id: 2, label: 'Analyze findings', color: 'bg-purple-500' },
+  { id: 3, label: 'Generate report', color: 'bg-blue-500' },
+  { id: 4, label: 'Deliver output', color: 'bg-teal-500' }
+];
+
+function SleekHeroMockup() {
+  return (
+    <div className="w-full max-w-7xl mx-auto px-6 py-24 border-t border-gray-100 mt-20 relative bg-[#F8FAFC]">
+      <div className="absolute inset-0 z-0 flex justify-center items-center opacity-30 pointer-events-none">
+         <div className="w-[800px] h-[600px] bg-gradient-to-tr from-indigo-100 via-purple-50 to-white rounded-full blur-[120px]"></div>
+      </div>
+      <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+        <div>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 border border-slate-200 border-b-slate-300 shadow-inner mb-8 transition-transform hover:scale-105 cursor-default">
+            <span className="text-sm font-semibold text-slate-800">Latest Release: Agent Core v3.1</span>
+            <div className="bg-slate-800 text-white rounded-full w-4 h-4 flex items-center justify-center">
+              <ArrowRight size={10} />
+            </div>
+          </div>
+          <h2 className="text-5xl md:text-6xl font-black text-slate-900 tracking-tight leading-[1.1] mb-6 font-sans">
+            Build AI Agents That <br/>
+            <span className="text-indigo-600">Fully on Autopilot</span>
+          </h2>
+          <p className="text-lg text-slate-500 leading-relaxed max-w-lg mb-10">
+            A reliable agent infrastructure that handles research, analysis, communication, and task execution with zero supervision.
+          </p>
+          <button className="flex items-center gap-3 px-8 py-4 bg-slate-900 text-white rounded-xl font-medium shadow-xl hover:bg-slate-800 hover:-translate-y-0.5 active:translate-y-0 transition-all select-none">
+            Build Your Agent
+            <div className="w-6 h-6 rounded bg-slate-700 flex justify-center items-center"><ArrowRight size={14}/></div>
+          </button>
+        </div>
+        <div className="relative h-[600px] w-full flex justify-center items-center">
+           <motion.div 
+             initial={{ scale: 0.8, opacity: 0 }}
+             animate={{ scale: 1, opacity: 1 }}
+             transition={{ type: 'spring', damping: 20 }}
+             className="absolute z-20 w-32 h-32 bg-white rounded-full shadow-[0_20px_40px_-10px_rgba(0,0,0,0.1),0_0_0_1px_rgba(0,0,0,0.05)] flex justify-center items-center"
+           >
+              <div className="w-20 h-20 bg-indigo-600 rounded-full flex justify-center items-center shadow-inner shadow-indigo-400">
+                 <Rocket className="text-white w-8 h-8"/>
+              </div>
+           </motion.div>
+           {STEPS.map((step, idx) => {
+             const angle = (idx * (360 / STEPS.length)) - 90;
+             const radius = 180;
+             const x = Math.cos(angle * (Math.PI / 180)) * radius;
+             const y = Math.sin(angle * (Math.PI / 180)) * radius;
+             return (
+               <motion.div 
+                 key={step.id}
+                 initial={{ x: 0, y: 0, opacity: 0 }}
+                 animate={{ x, y, opacity: 1 }}
+                 transition={{ delay: 0.2 + (idx * 0.1), type: 'spring' }}
+                 className="absolute z-10"
+               >
+                 <svg className="absolute top-1/2 left-1/2 overflow-visible -z-10 opacity-20 pointer-events-none text-slate-400" width="0" height="0">
+                   <line x1="0" y1="0" x2={-x} y2={-y} stroke="currentColor" strokeWidth="2" strokeDasharray="4 4"/>
+                 </svg>
+                 <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-2xl shadow-lg border border-slate-100 min-w-[200px]">
+                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white ${step.color} shadow-sm`}>
+                     <Check size={16} />
+                   </div>
+                   <span className="font-semibold text-slate-700 text-sm">{step.label}</span>
+                 </div>
+               </motion.div>
+             )
+           })}
+           <motion.div 
+             initial={{ y: 50, opacity: 0 }}
+             animate={{ y: 160, x: 140, opacity: 1 }}
+             transition={{ delay: 0.8 }}
+             className="absolute bg-white p-4 rounded-xl shadow-2xl border border-slate-100 z-30 w-48 rotate-6 hover:rotate-0 hover:scale-105 transition-transform cursor-default"
+           >
+              <div className="flex items-center gap-2 mb-3">
+                 <div className="w-8 h-8 bg-red-100 text-red-600 rounded flex justify-center items-center shadow-inner"><Layout size={16}/></div>
+                 <span className="text-xs font-bold text-slate-800">PDF REPORT</span>
+              </div>
+              <div className="space-y-2">
+                <div className="h-2 bg-slate-100 rounded-full w-full"></div>
+                <div className="h-2 bg-slate-100 rounded-full w-5/6"></div>
+                <div className="h-2 bg-slate-100 rounded-full w-4/6"></div>
+              </div>
+           </motion.div>
+        </div>
+      </div>
+      <div className="mt-24 border-t border-slate-200/60 pt-12 text-center">
+        <h3 className="text-slate-500 font-medium text-sm mb-8 uppercase tracking-widest">
+          Trusted & Deployed by <span className="text-indigo-600 font-bold">300+</span> Technical Teams Worldwide
+        </h3>
+      </div>
+    </div>
+  );
+}
+
+const INTEGRATIONS = [
+  { icon: FileText, label: 'PDF', color: 'text-red-500' },
+  { icon: FileSpreadsheet, label: 'XLSX', color: 'text-green-600' },
+  { icon: FileText, label: 'DOCX', color: 'text-blue-600' },
+  { icon: Calendar, label: 'Calendly', color: 'text-blue-500' },
+  { icon: Calendar, label: 'Cal.com', color: 'text-gray-800' },
+  { icon: BarChart2, label: 'PostHog', color: 'text-orange-500' },
+  { icon: BarChart2, label: 'Mixpanel', color: 'text-indigo-500' },
+  { icon: Slack, label: 'Slack', color: 'text-purple-600' },
+  { icon: Briefcase, label: 'HubSpot', color: 'text-orange-600' },
+  { icon: Briefcase, label: 'Pipedrive', color: 'text-green-500' },
+  { icon: Mail, label: 'Google', color: 'text-blue-500' },
+];
+
+function IntegrationTicker() {
+  return (
+    <div className="w-full overflow-hidden bg-white/50 backdrop-blur-sm border-t border-b border-gray-100 py-8 relative">
+      <div className="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[#F8FAFC] to-transparent z-10"></div>
+      <div className="absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-[#F8FAFC] to-transparent z-10"></div>
+      <div className="flex w-[200%] gap-12 items-center">
+        <motion.div 
+          initial={{ x: 0 }}
+          animate={{ x: "-50%" }}
+          transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+          className="flex gap-12 items-center uppercase tracking-wider font-semibold text-sm"
+        >
+          {[...INTEGRATIONS, ...INTEGRATIONS].map((Integration, i) => (
+            <div key={i} className="flex items-center gap-3 shrink-0 opacity-70 hover:opacity-100 transition-opacity">
+              <div className={`p-2.5 rounded-xl bg-white shadow-sm border border-gray-100 ${Integration.color}`}>
+                <Integration.icon size={24} strokeWidth={2} />
+              </div>
+              <span className="text-gray-500">{Integration.label}</span>
+            </div>
+          ))}
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
+const COMMUNITY_TEMPLATES = [
+  {
+    id: 'startup-pitch',
+    title: 'Startup Pitch Deck (Seed)',
+    category: 'Startups',
+    author: 'Vault.Africa',
+    isPro: false,
+    rating: 4.9,
+    uses: 1240,
+    coverColor: 'from-blue-500 to-indigo-600',
+    type: 'pitch-deck'
+  },
+  {
+    id: 'saas-financial',
+    title: 'SaaS Financial Model v3',
+    category: 'Finance',
+    author: 'FinTech Labs',
+    isPro: true,
+    rating: 5.0,
+    uses: 890,
+    coverColor: 'from-emerald-400 to-teal-500',
+    type: 'financial-model'
+  },
+  {
+    id: 'marketing-roadmap',
+    title: '2024 Marketing Roadmap',
+    category: 'Marketing',
+    author: 'GrowthHackers',
+    isPro: false,
+    rating: 4.7,
+    uses: 3200,
+    coverColor: 'from-orange-400 to-pink-500',
+    type: 'strategy'
+  },
+  {
+    id: 'b2b-sales-deck',
+    title: 'B2B Enterprise Sales Deck',
+    category: 'Sales',
+    author: 'SalesOpsHQ',
+    isPro: true,
+    rating: 4.8,
+    uses: 650,
+    coverColor: 'from-purple-500 to-fuchsia-600',
+    type: 'pitch-deck'
+  },
+  {
+    id: 'product-req',
+    title: 'Product Requirements Doc',
+    category: 'Product',
+    author: 'PM Network',
+    isPro: false,
+    rating: 4.9,
+    uses: 2100,
+    coverColor: 'from-sky-400 to-blue-500',
+    type: 'document'
+  },
+  {
+    id: 'investor-update',
+    title: 'Monthly Investor Update',
+    category: 'Startups',
+    author: 'IdealApp Team',
+    isPro: false,
+    rating: 5.0,
+    uses: 4500,
+    coverColor: 'from-slate-700 to-slate-900',
+    type: 'document'
+  }
+];
+
+function TemplatesGallery() {
+  const navigate = useNavigate();
+
+  const handleRemix = (template: typeof COMMUNITY_TEMPLATES[0]) => {
+    navigate('/app', { state: { prefill: { text: `Remixing ${template.title}...` }, templateId: template.id } });
+  };
+
+  return (
+    <section className="py-24 bg-white border-y border-slate-100">
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="flex flex-col md:flex-row justify-between items-end mb-12">
+          <div>
+            <h2 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">Community Templates</h2>
+            <p className="text-slate-500 max-w-xl text-lg">
+              Remix top performing documents crafted by the community. Free users can access community templates, Pro users unlock premium ones.
+            </p>
+          </div>
+          <button onClick={() => navigate('/solutions')} className="mt-6 md:mt-0 px-6 py-2 bg-slate-100 text-slate-700 font-medium rounded-full hover:bg-slate-200 transition-colors flex items-center gap-2">
+            View all 180+ templates <ExternalLink size={16}/>
+          </button>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          {COMMUNITY_TEMPLATES.map((tmpl, idx) => (
+            <motion.div 
+              key={tmpl.id}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: idx * 0.1 }}
+              className="group flex flex-col bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl hover:shadow-slate-200/50 transition-all cursor-default"
+            >
+              <div className={`h-40 bg-gradient-to-br ${tmpl.coverColor} p-6 relative overflow-hidden flex flex-col justify-between`}>
+                <div className="flex justify-between items-start relative z-10">
+                   <div className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-white text-xs font-semibold tracking-wide">
+                     {tmpl.category}
+                   </div>
+                   {tmpl.isPro && (
+                     <div className="bg-yellow-400 text-yellow-900 px-2 py-1 rounded tracking-wide text-[10px] font-black flex items-center gap-1 shadow-sm">
+                       <Crown size={12}/> PRO
+                     </div>
+                   )}
+                </div>
+                <h3 className="text-white font-bold text-xl leading-tight relative z-10 w-4/5 pt-8">{tmpl.title}</h3>
+                <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+                <div className="absolute -top-10 -left-10 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+              </div>
+              <div className="p-5 flex flex-col flex-1 justify-between bg-white">
+                <div className="flex justify-between items-center mb-6">
+                  <div className="text-sm text-slate-500 font-medium flex items-center gap-2">
+                     By <span className="text-slate-800">{tmpl.author}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs font-semibold text-slate-400">
+                     <span className="flex items-center gap-1"><Star size={14} className="text-yellow-400 fill-yellow-400"/> {tmpl.rating}</span>
+                     <span>{tmpl.uses.toLocaleString()} copies</span>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => handleRemix(tmpl)}
+                  className="w-full py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-colors group-hover:bg-slate-900 group-hover:text-white group-hover:border-slate-900"
+                >
+                  <Copy size={16} /> Remix Template
+                </button>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
 import { nanoid } from 'nanoid';
 
 import { useChatStore } from '../store/chatStore';
@@ -1267,31 +1541,33 @@ export default function HomePage() {
 
   return (
     <PageWrapper>
-      <SEOHead
-        title="AI-Powered Business Document Creator | Pitch Decks, Business Plans & More"
-        description="Create investor-ready pitch decks, business plans, and financial models with AI. 54 templates, drag-and-drop editor, investor database, and data rooms. Free to start."
-        keywords="AI pitch deck maker, AI business plan generator, pitch deck creator, AI document creator for startups, financial model generator, investor database, data room software, pitch deck builder online, AI document tools"
-        canonicalUrl="https://idealapp.technology/"
-        ogImage="https://idealapp.technology/og/home.png"
-        structuredData={[organizationSchema, softwareApplicationSchema, websiteSchema]}
-      />
-      <HeroSection 
-        onPromptSubmit={handlePromptSubmit} 
-        heroPrompt={heroPrompt}
-        onEdit={handleEditDocument}
-        onDownload={handleDownloadDocument}
-        isNavigating={isNavigating}
-      />
-      
-      <SleekHeroMockup />
-      <IntegrationTicker />
-      <TemplatesGallery />
-      
-      <DashboardPreview />
-      <EditorFeatures />
-      <Testimonials />
-      <BrandDNA />
-      <StatsBar />
+      <div className="premium-grain-accent w-full">
+        <SEOHead
+          title="AI-Powered Business Document Creator | Pitch Decks, Business Plans & More"
+          description="Create investor-ready pitch decks, business plans, and financial models with AI. 54 templates, drag-and-drop editor, investor database, and data rooms. Free to start."
+          keywords="AI pitch deck maker, AI business plan generator, pitch deck creator, AI document creator for startups, financial model generator, investor database, data room software, pitch deck builder online, AI document tools"
+          canonicalUrl="https://idealapp.technology/"
+          ogImage="https://idealapp.technology/og/home.png"
+          structuredData={[organizationSchema, softwareApplicationSchema, websiteSchema]}
+        />
+        <HeroSection 
+          onPromptSubmit={handlePromptSubmit} 
+          heroPrompt={heroPrompt}
+          onEdit={handleEditDocument}
+          onDownload={handleDownloadDocument}
+          isNavigating={isNavigating}
+        />
+        
+        <SleekHeroMockup />
+        <IntegrationTicker />
+        <TemplatesGallery />
+        
+        <DashboardPreview />
+        <EditorFeatures />
+        <Testimonials />
+        <BrandDNA />
+        <StatsBar />
+      </div>
     </PageWrapper>
   );
 }

@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from "react";
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 
 interface Props {
   children?: ReactNode;
@@ -6,42 +6,48 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  error?: Error;
+  error: Error | null;
+  errorInfo: ErrorInfo | null;
 }
 
-export class ErrorBoundary extends Component<Props, State> {
+class ErrorBoundary extends Component<Props, State> {
   public state: State = {
-    hasError: false
+    hasError: false,
+    error: null,
+    errorInfo: null
   };
 
   public static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    // Update state so the next render will show the fallback UI.
+    return { hasError: true, error, errorInfo: null };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error:", error, errorInfo);
-    // Here we could also log to PostHog or Google Analytics
+    this.setState({
+      error,
+      errorInfo
+    });
   }
 
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-          <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-100 p-8 text-center">
-            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-              </svg>
+        <div className="fixed inset-0 z-[9999] bg-red-50 p-8 flex flex-col items-center justify-center overflow-auto font-mono text-red-900">
+          <div className="max-w-4xl w-full bg-white rounded-lg shadow-2xl border border-red-200 p-8">
+            <h1 className="text-3xl font-bold mb-4">React Application Crashed</h1>
+            <h2 className="text-xl font-semibold mb-2">{this.state.error?.toString()}</h2>
+            <div className="bg-red-900 text-red-50 p-4 rounded text-sm overflow-x-auto my-4 whitespace-pre-wrap">
+              {this.state.error?.stack}
             </div>
-            <h1 className="text-2xl font-bold text-slate-900 mb-2">Something went wrong</h1>
-            <p className="text-slate-500 mb-8">
-              We encountered an unexpected error. Our team has been notified.
-            </p>
-            <button
+            {this.state.errorInfo && (
+              <div className="bg-slate-900 text-slate-50 p-4 rounded text-sm overflow-x-auto whitespace-pre-wrap">
+                {this.state.errorInfo.componentStack}
+              </div>
+            )}
+            <button 
+              className="mt-6 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700" 
               onClick={() => window.location.reload()}
-              className="w-full bg-indigo-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-indigo-700 transition"
             >
               Reload Page
             </button>
@@ -53,3 +59,5 @@ export class ErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
+
+export { ErrorBoundary };

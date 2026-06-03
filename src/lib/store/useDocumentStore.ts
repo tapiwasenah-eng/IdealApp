@@ -40,6 +40,7 @@ interface HistoryFrame {
 
 interface DocumentStoreState {
   document: DocumentMeta | null;
+  currentDocument: DocumentMeta | null;
   documents: DocumentMeta[];
   loading: boolean;
   error: string | null;
@@ -72,6 +73,7 @@ export const useDocumentStore = create<DocumentStoreState>()(
   persist(
     (set, get) => ({
       document: null,
+      currentDocument: null,
       documents: [],
       loading: false,
       error: null,
@@ -92,7 +94,7 @@ export const useDocumentStore = create<DocumentStoreState>()(
         if (doc) {
           docCache[doc.id] = doc;
         }
-        set({ document: doc });
+        set({ document: doc, currentDocument: doc });
       },
 
       setLoading: (value) => set({ loading: value }),
@@ -130,7 +132,7 @@ export const useDocumentStore = create<DocumentStoreState>()(
           };
 
           docCache[docId] = loaded;
-          set({ document: loaded, history: [] });
+          set({ document: loaded, currentDocument: loaded, history: [] });
         } catch (err: any) {
           console.error('Error loading document:', err);
           setError(err.message || 'Failed to load document');
@@ -224,7 +226,7 @@ export const useDocumentStore = create<DocumentStoreState>()(
         };
 
         docCache[updatedDoc.id] = updatedDoc;
-        set({ document: updatedDoc });
+        set({ document: updatedDoc, currentDocument: updatedDoc });
       },
 
       undoAction: (docId: string) => {
@@ -248,7 +250,7 @@ export const useDocumentStore = create<DocumentStoreState>()(
           };
 
           docCache[updatedDoc.id] = updatedDoc;
-          return { document: updatedDoc, history: newHistory };
+          return { document: updatedDoc, currentDocument: updatedDoc, history: newHistory };
         });
       },
 
