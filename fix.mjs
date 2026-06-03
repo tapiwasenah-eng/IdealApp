@@ -16,7 +16,7 @@ function walk(dir) {
     return results;
 }
 
-const files = walk('src');
+const files = [...walk('src'), ...walk('server')];
 files.forEach(file => {
     if (file.endsWith('.ts') || file.endsWith('.tsx')) {
         let content = fs.readFileSync(file, 'utf8');

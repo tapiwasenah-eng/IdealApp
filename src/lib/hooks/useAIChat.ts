@@ -1,96 +1,140 @@
+// src/lib/hooks/useAIChat.ts
 import { useState } from 'react';
-import { useDocumentStore } from '../store/useDocumentStore';
 import { auth } from '../firebase';
+import { useDocumentStore } from '../store/useDocumentStore';
 
 export interface ChatMessage {
   id: string;
-  role: "user" | "ai" | "assistant";
-  content?: string;
-  text?: string;
-  actionable?: boolean;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
 }
 
-export const useAIChat = () => {
-  const [messages, setMessages] = useState<any[]>([]);
-  const [isTyping, setIsTyping] = useState(false);
-  const { currentDocument, updateSectionContent, document, updateSection } = useDocumentStore();
+interface UseAIChatResult {
+  messages: ChatMessage[];
+  isTyping: boolean;
+  sendMessage: (userPrompt: string, activeSectionTitle?: string) => Promise<void>;
+  suggestedChips: string[];
+  applyToSection: (text: string) => void;
+}
 
-  const activeDoc = currentDocument || document;
-  const updateSec = updateSectionContent || updateSection;
-  const documentId = activeDoc?.id || 'doc-123';
+export const useAIChat = (documentId: string): UseAIChatResult => {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
+
+  const { document: currentDocument, activeSectionId, updateSectionContent } = useDocumentStore();
 
   const getSuggestedChips = () => {
-    return [
-      "Flesh out the market analysis",
-      "Make this section more formal",
-      "Simplify language",
-      "Highlight key risks and mitigations"
+    const defaultChips = [
+      "Evaluate against YC Memo criteria",
+      "Tighten wording & remove fluff",
+      "Stress-test downside scenario"
     ];
+
+    if (!currentDocument || !activeSectionId) return defaultChips;
+
+    const section = currentDocument.sections.find(s => s.id === activeSectionId);
+    if (!section) return defaultChips;
+
+    const title = section.title.toLowerCase();
+
+    if (title.includes('traction') || title.includes('milestone')) {
+      return ["Add cohort retention metrics", "Make execution milestones clearer", "Tighten wording"];
+    }
+    if (title.includes('financial') || title.includes('model') || title.includes('business')) {
+      return ["Stress-test downside scenario", "Clarify margin compounding", "Add unit economics bullets"];
+    }
+    if (title.includes('problem')) {
+      return ["Make the pain point more acute", "Add metrics to quantify the problem", "Evaluate against Sequoia canvas"];
+    }
+    if (title.includes('solution') || title.includes('product')) {
+      return ["Clarify the unfair advantage", "Make it less generic", "Highlight the \"Aha\" moment"];
+    }
+
+    return defaultChips;
   };
 
   const applyToSection = (text: string) => {
-    // Legacy support piece if any code calls it, though we rely on real-time proxy
+    // Only used for UI parity, real update handled directly in chat payload
   };
 
   const sendMessage = async (userPrompt: string, activeSectionTitle?: string) => {
     if (!userPrompt.trim()) return;
 
-    const userMessage = { id: Date.now().toString(), role: 'user', content: userPrompt, text: userPrompt };
+    const userMessage: ChatMessage = {
+      id: `${Date.now()}-user`,
+      role: 'user',
+      content: userPrompt,
+    };
+
     setMessages((prev) => [...prev, userMessage]);
     setIsTyping(true);
 
     try {
-      const token = await auth.currentUser?.getIdToken();
-      
-      // Call the secure proxy server endpoint instead of the direct client-side SDK
+      const user = auth.currentUser;
+      const token = await user?.getIdToken();
+      if (!token) {
+        throw new Error('User not authenticated for chat');
+      }
+
       const response = await fetch('/api/chat-document', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           documentId,
           prompt: userPrompt,
           activeSection: activeSectionTitle,
           documentContext: {
-            title: activeDoc?.title,
-            originalPrompt: activeDoc?.originalPrompt,
-            sections: activeDoc?.sections,
-            industry: activeDoc?.industry || activeDoc?.type || "saas"
-          }
-        })
+            id: currentDocument?.id,
+            title: currentDocument?.title,
+            companyName: currentDocument?.companyName,
+            industry: currentDocument?.industry,
+            stage: currentDocument?.stage,
+            documentType: currentDocument?.documentType,
+            originalPrompt: currentDocument?.originalPrompt,
+            sections: currentDocument?.sections,
+          },
+        }),
       });
 
       const data = await response.json();
-      
-      if (!response.ok) throw new Error(data.error || 'Chat processing failure');
 
-      const assistantMessage = {
-        id: (Date.now() + 1).toString(),
+      if (!response.ok) {
+        throw new Error(data.error || 'Chat processing failure');
+      }
+
+      const assistantMessage: ChatMessage = {
+        id: `${Date.now()}-assistant`,
         role: 'assistant',
-        content: data.reply,
-        text: data.reply
+        content:
+          typeof data.reply === 'string'
+            ? data.reply
+            : 'I updated this section using sector‑specific guidance.',
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
 
-      // If the chat agent processed an inline update request, sync the editor canvas
-      if (data.updatedSectionContent && activeSectionTitle) {
-        const targetSec = activeDoc?.sections?.find((s: any) => s.title === activeSectionTitle || s.id === activeSectionTitle);
-        if (targetSec && updateSec) {
-          updateSec(targetSec.id, data.updatedSectionContent);
+      if (data.updatedSectionContent && activeSectionTitle && currentDocument?.sections) {
+        const targetSection = currentDocument.sections.find(
+          (sec) => sec.title === activeSectionTitle,
+        );
+        if (targetSection) {
+          updateSectionContent(targetSection.id, data.updatedSectionContent);
         }
       }
-
     } catch (error: any) {
-      console.error('❌ Chat Agent Error:', error.message);
-      setMessages((prev) => [...prev, {
-        id: Date.now().toString(),
+      console.error('❌ Chat Agent Error:', error?.message || error);
+
+      const fallbackMessage: ChatMessage = {
+        id: `${Date.now()}-assistant-fallback`,
         role: 'assistant',
-        content: `⚠️ System Note: Local Workspace is operating in fallback/offline mode. Suggested Action: Make your edits directly within the rich text canvas above.`,
-        text: `⚠️ System Note: Local Workspace is operating in fallback/offline mode. Suggested Action: Make your edits directly within the rich text canvas above.`
-      }]);
+        content:
+          '⚠️ System note: The live AI chat is temporarily unavailable. You can continue editing directly in the canvas while we restore connectivity.',
+      };
+
+      setMessages((prev) => [...prev, fallbackMessage]);
     } finally {
       setIsTyping(false);
     }

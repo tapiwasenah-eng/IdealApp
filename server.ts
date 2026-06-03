@@ -66,6 +66,7 @@ async function startServer() {
   app.use('/api/data-room-links', dataRoomRouter);
   app.use('/api/export', (await import('./server/routes/export.ts')).default);
   app.use('/api/outreach', (await import('./server/routes/outreach.ts')).default);
+  app.use('/api/slack', (await import('./server/routes/slack.ts')).default);
 
   // PayPal Configuration
   const getPayPalConfig = () => {

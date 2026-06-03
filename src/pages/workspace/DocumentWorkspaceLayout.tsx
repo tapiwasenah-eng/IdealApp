@@ -12,7 +12,7 @@ export const DocumentWorkspaceLayout: React.FC = () => {
   const { documentId } = useParams<{ documentId: string }>();
   const navigate = useNavigate();
   // Do not name local variables 'document' here; use 'docState' to avoid shadowing global document object
-  const { document: docState, loadDocument, investorView, setInvestorView, undoAction, history } =
+  const { document: docState, loadDocumentById, investorView, setInvestorView, undoAction, history } =
     useDocumentStore();
   const { colors, typography, componentVariants } = designSystem;
 
@@ -24,14 +24,14 @@ export const DocumentWorkspaceLayout: React.FC = () => {
     const fetchDoc = async () => {
       if (documentId) {
         setLoading(true);
-        await loadDocument(documentId);
+        await loadDocumentById(documentId);
         if (mounted) setLoading(false);
       }
     };
     fetchDoc();
     setMounted(true);
     return () => { mounted = false; };
-  }, [documentId, loadDocument]);
+  }, [documentId, loadDocumentById]);
 
   if (!mounted || loading) {
     return (

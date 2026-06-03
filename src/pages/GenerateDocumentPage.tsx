@@ -247,18 +247,77 @@ export default function GenerateDocumentPage() {
   const handleDownload = () => {
      if (!generatedDoc) return;
      
-     // Download happens fully client-side without backend calls
-     const fullText = generatedDoc.sections.map((s: any) => `## ${s.title}\n\n${s.content || s.body || ''}`).join('\n\n');
-     const blob = new Blob([fullText], { type: 'text/markdown' });
-     const url = URL.createObjectURL(blob);
-     const a = document.createElement('a');
-     a.href = url;
-     a.download = `${generatedDoc.title || 'Document'}.md`;
-     document.body.appendChild(a);
-     a.click();
-     document.body.removeChild(a);
-     URL.revokeObjectURL(url);
-     toast.success('Document downloaded!');
+     // Robust HTML Export blending latest state with Document Typography and Watermark
+    const exportHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <title>${generatedDoc.title || 'IdealApp Document'}</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&display=swap');
+          body {
+            font-family: 'Inter', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            color: #1e293b;
+            line-height: 1.6;
+          }
+          h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 2.5rem;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 1rem;
+            margin-bottom: 2rem;
+            color: #0f172a;
+          }
+          h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.75rem;
+            color: #334155;
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+          }
+          p { margin-bottom: 1.25rem; }
+          ul, ol { margin-bottom: 1.25rem; padding-left: 1.5rem; }
+          li { margin-bottom: 0.5rem; }
+          .watermark {
+            margin-top: 4rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e2e8f0;
+            color: #94a3b8;
+            font-size: 0.875rem;
+            text-align: center;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>${generatedDoc.title || 'Document'}</h1>
+        ${generatedDoc.sections.map((s: any) => `
+          <section>
+            <h2>${s.title}</h2>
+            <div>${s.content || s.body || ''}</div>
+          </section>
+        `).join('')}
+        
+        <div class="watermark">
+          Generated securely with <strong>IdealApp.technology</strong>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([exportHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${generatedDoc.title || 'Document'}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success('Document downloaded!');
   };
 
   const handleSaveToProjects = async () => {
@@ -419,6 +478,29 @@ export default function GenerateDocumentPage() {
                 You can generate a draft without signing in, but you'll need an account to export.
               </p>
             )}
+
+            {isGenerating && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm">
+                <div className="absolute inset-0 bg-gradient-to-tr from-indigo-50/50 via-white/50 to-violet-50/50 mix-blend-overlay"></div>
+                <div className="relative flex flex-col items-center max-w-sm p-8 text-center bg-white border border-gray-100 shadow-2xl rounded-3xl">
+                  <div className="relative w-16 h-16 mb-6">
+                    <div className="absolute inset-0 bg-indigo-200 rounded-full animate-ping opacity-20"></div>
+                    <div className="absolute inset-0 flex items-center justify-center bg-indigo-600 rounded-full shadow-inner animate-pulse">
+                      <Sparkles className="w-8 h-8 text-white animate-spin" style={{ animationDuration: '3s' }} />
+                    </div>
+                  </div>
+                  <h3 className="mb-2 text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600">
+                    Drafting your document...
+                  </h3>
+                  <p className="text-sm font-medium text-slate-500">
+                     Analyzing {formData.companyName || 'your startup'} and applying {formData.industry || 'sector'} frameworks.
+                  </p>
+                  <div className="w-full h-1 mt-6 overflow-hidden bg-gray-100 rounded-full">
+                    <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 animate-[pulse_1s_ease-in-out_infinite]" style={{ width: '100%', transformOrigin: 'left', animation: 'scale-x 2s infinite ease-in-out' }}></div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         );
         
@@ -459,19 +541,32 @@ export default function GenerateDocumentPage() {
             </div>
             
             {showPreview && generatedDoc && (
-               <div className="mt-8 p-6 bg-slate-50 border border-slate-200 rounded-2xl">
-                   <div className="flex justify-between items-center mb-6 border-b border-slate-200 pb-4">
-                       <h3 className="text-xl font-bold text-slate-800">Document Preview</h3>
-                       <button onClick={() => setShowPreview(false)} className="text-sm text-slate-500 hover:text-slate-800 font-medium px-4 py-2 bg-white rounded-lg border border-slate-200 shadow-sm">Close Preview</button>
+               <div className="mt-10 mb-6 relative">
+                 <div className="p-8 md:p-12 bg-[#faf9f7] border border-slate-200 rounded-[28px] shadow-sm font-serif">
+                   <div className="flex justify-between items-center mb-10 pb-6 border-b border-slate-200/60 font-sans">
+                       <div>
+                         <h3 className="text-sm font-semibold tracking-wide text-indigo-600 uppercase mb-1">Investor View</h3>
+                         <p className="text-2xl font-serif text-slate-800 tracking-tight">{generatedDoc.title || 'Document Preview'}</p>
+                       </div>
+                       <button onClick={() => setShowPreview(false)} className="text-sm text-slate-500 hover:text-slate-800 font-medium px-5 py-2.5 bg-white hover:bg-slate-50 rounded-xl border border-slate-200 shadow-sm transition-colors">Close</button>
                    </div>
-                   <div className="prose prose-slate max-w-none">
+                   <div className="prose prose-slate max-w-none 
+                                  prose-headings:font-serif prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-slate-900 
+                                  prose-h2:text-3xl prose-h2:mt-12 prose-h2:mb-6
+                                  prose-h3:text-2xl prose-h3:mt-8 prose-h3:mb-4
+                                  prose-p:text-[17px] prose-p:leading-[1.8] prose-p:text-slate-700
+                                  prose-li:text-[17px] prose-li:leading-[1.8] prose-li:text-slate-700 prose-li:my-2
+                                  prose-strong:font-semibold prose-strong:text-slate-900
+                                  marker:text-indigo-600"
+                   >
                        {generatedDoc.sections.map((sec: any, idx: number) => (
-                           <div key={idx} className="mb-6">
-                               <h2 className="text-2xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4">{sec.title}</h2>
+                           <div key={idx} className="mb-14">
+                               <h2 className="border-b border-slate-200/60 pb-3">{sec.title}</h2>
                                <div dangerouslySetInnerHTML={{ __html: sec.content || sec.body || '' }} />
                            </div>
                        ))}
                    </div>
+                 </div>
                </div>
             )}
           </div>

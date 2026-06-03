@@ -17,6 +17,9 @@ import AuthModal from '../components/auth/AuthModal';
 import { BRAND_ASSETS } from '../lib/brandAssets';
 import { aiService } from '../services/aiService';
 import { exportService } from '../services/exportService';
+import { SleekHeroMockup } from '../components/home/SleekHero';
+import { TemplatesGallery } from '../components/home/TemplatesGallery';
+import { IntegrationTicker } from '../components/home/IntegrationTicker';
 import { nanoid } from 'nanoid';
 
 import { useChatStore } from '../store/chatStore';
@@ -95,12 +98,14 @@ function HeroSection({
   onPromptSubmit, 
   heroPrompt,
   onEdit,
-  onDownload
+  onDownload,
+  isNavigating
 }: { 
   onPromptSubmit: (p: any) => void, 
   heroPrompt: string,
   onEdit: (doc: any) => void,
-  onDownload: (doc: any) => void
+  onDownload: (doc: any) => void,
+  isNavigating?: boolean
 }) {
   const [promptIndex, setPromptIndex] = useState(0);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
@@ -186,10 +191,10 @@ function HeroSection({
           <span className="text-xs md:text-sm font-medium text-slate-700">The AI-powered document builder</span>
         </div>
         <h1 className="leading-[1.1] font-extrabold tracking-[-0.04em] text-gray-900 mb-6 font-sans" style={{ fontSize: 'clamp(38px, 6vw, 64px)' }}>
-          Your IdealApp to Build Anything
+          Create complete 7-section decks instantly with your AI Partner.
         </h1>
         <p className="text-[15px] sm:text-[17px] text-gray-500 max-w-2xl mx-auto leading-[1.7] opacity-75">
-          Create, refine, and perfect professional documents with AI.
+          IdealApp handles research, structuring, and execution with predictable accuracy. Build professional, Billion-Dollar SaaS presentations in seconds.
         </p>
         <div className="mt-8 text-sm text-gray-500 font-medium">
           Free to start · No credit card required · 180+ templates
@@ -307,9 +312,10 @@ function HeroSection({
 
                 <button 
                   type="submit"
-                  className="w-10 h-10 shrink-0 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                  disabled={isNavigating}
+                  className="w-10 h-10 shrink-0 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors disabled:opacity-50"
                 >
-                  <Send size={18} />
+                  {isNavigating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send size={18} />}
                 </button>
               </div>
             </div>
@@ -354,9 +360,10 @@ function HeroSection({
 
               <button 
                 type="submit"
-                className="w-10 h-10 shrink-0 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                disabled={isNavigating}
+                className="w-10 h-10 shrink-0 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors disabled:opacity-50"
               >
-                <Send size={18} />
+                {isNavigating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send size={18} />}
               </button>
             </div>
             
@@ -1215,10 +1222,14 @@ function StatsBar() {
 export default function HomePage() {
   const navigate = useNavigate();
   const [heroPrompt, setHeroPrompt] = useState('');
+  const [isNavigating, setIsNavigating] = useState(false);
 
   const handlePromptSubmit = (prompt: any) => {
+    if (isNavigating) return;
+    setIsNavigating(true);
     const text = typeof prompt === 'string' ? prompt : prompt.full;
     navigate(`/generate`, { state: { prefill: { full: text } } });
+    setTimeout(() => setIsNavigating(false), 1000);
   };
 
   const handleEditDocument = async (doc: any) => {
@@ -1269,9 +1280,13 @@ export default function HomePage() {
         heroPrompt={heroPrompt}
         onEdit={handleEditDocument}
         onDownload={handleDownloadDocument}
+        isNavigating={isNavigating}
       />
-      <VideoStepsSection />
-      <PopularTemplates />
+      
+      <SleekHeroMockup />
+      <IntegrationTicker />
+      <TemplatesGallery />
+      
       <DashboardPreview />
       <EditorFeatures />
       <Testimonials />

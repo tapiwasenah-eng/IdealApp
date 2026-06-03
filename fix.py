@@ -12,10 +12,10 @@ def unescape_file(filepath):
     with open(filepath, 'w') as f:
         f.write(content)
 
-src_dir = 'src'
+src_dir = 'server'
 for root, dirs, files in os.walk(src_dir):
     for file in files:
         if file.endswith('.ts') or file.endswith('.tsx'):
             unescape_file(os.path.join(root, file))
 
-print("Fixed syntax errors")
+print("Fixed syntax errors in server directory")

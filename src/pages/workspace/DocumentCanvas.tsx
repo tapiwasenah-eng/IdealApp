@@ -9,7 +9,7 @@ export const DocumentCanvas: React.FC = () => {
   const {
     document,
     activeSectionId,
-    updateSection,
+    updateSectionContent,
     investorView,
     setActiveSection,
   } = useDocumentStore();
@@ -35,12 +35,12 @@ export const DocumentCanvas: React.FC = () => {
     setGeneratingSections(prev => ({ ...prev, [sectionId]: true }));
     
     try {
-        const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+        const token = await auth.currentUser?.getIdToken();
         const response = await fetch('/api/regenerate-section', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': 'Bearer ' + token
         },
         body: JSON.stringify({
           sectionTitle,
@@ -53,7 +53,7 @@ export const DocumentCanvas: React.FC = () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       
-      updateSection(sectionId, data.content);
+      updateSectionContent(sectionId, data.content);
     } catch (err) {
       console.warn("Falling back to local domain database playbook lookup...");
       const sectorKey = (document?.industry || document?.type || '').toLowerCase().includes('fintech') ? 'fintech' : 'saas';
@@ -61,7 +61,7 @@ export const DocumentCanvas: React.FC = () => {
         ? `<p>Revised Focus: Regulated secure APIs processing transactions directly inside localized structural execution loops.</p>`
         : `<p>Revised Focus: High-performance semantic automation patterns reconciling discordant graph database data parameters.</p>`;
       
-      updateSection(sectionId, localizedContent);
+      updateSectionContent(sectionId, localizedContent);
     } finally {
       setGeneratingSections(prev => ({ ...prev, [sectionId]: false }));
     }
@@ -209,7 +209,7 @@ export const DocumentCanvas: React.FC = () => {
               <div className="mt-2 text-slate-700 w-full" onClick={(e) => { e.stopPropagation(); setActiveSection(section.id); }}>
                  <SectionEditor 
                    content={section.content} 
-                   onChange={(content) => updateSection(section.id, content)} 
+                   onChange={(content) => updateSectionContent(section.id, content)} 
                  />
               </div>
 

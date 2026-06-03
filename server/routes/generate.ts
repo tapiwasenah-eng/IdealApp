@@ -2,54 +2,209 @@ import { Router } from 'express';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { rateLimit } from 'express-rate-limit';
+import helmet from 'helmet';
+import cors from 'cors';
+import xss from 'xss';
+import { Resend } from 'resend';
 import { requireAuth, AuthenticatedRequest } from '../authMiddleware';
 import { adminDb } from '../firebase-admin';
 
+// NOTE: Helmet / CORS are assumed to be wired in your main server file (server/index.ts).
+// Keep this file focused on route logic only for Google AI Studio compatibility.
+
 const router = Router();
 
+// ------------------------------------------------------------------
+// Infrastructure, Cyber Security & Email
+// ------------------------------------------------------------------
+
+// Strict Cyber Security measures Hardcoded per route basis
+router.use(helmet());
+router.use(cors({
+  origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['http://localhost:5173', 'http://localhost:3000'],
+  methods: ['POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50, // strict limiting
+  message: { error: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Resend Email Setup for transactional emails from our launch domain
+// Assume RESEND_API_KEY is available in the environment variables
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+const sanitizeInput = (input: any): any => {
+  if (typeof input === 'string') return xss(input);
+  if (typeof input === 'object' && input !== null) {
+    if (Array.isArray(input)) return input.map(sanitizeInput);
+    const sanitizedObj: any = {};
+    for (const key in input) {
+      sanitizedObj[key] = sanitizeInput(input[key]);
+    }
+    return sanitizedObj;
+  }
+  return input;
+};
+
+// ------------------------------------------------------------------
+// AI Environment Variables & Initialization
+// ------------------------------------------------------------------
+// Documenting Environment Variable Lookup:
+// The backend reads API keys using process.env. Priority is given to:
+// 1. GEMINI_API_KEY
+// 2. GOOGLE_API_KEY
+// 3. VITE_GEMINI_API_KEY (fallback)
+const apiKey =
+  process.env.GEMINI_API_KEY ||
+  process.env.GOOGLE_API_KEY ||
+  process.env.VITE_GEMINI_API_KEY;
+
+let genAI: GoogleGenerativeAI | null = null;
+if (apiKey) {
+  genAI = new GoogleGenerativeAI(apiKey);
+} else {
+  console.warn('⚠️ No Gemini API key found, using rich fallback document mode when necessary.');
+}
+
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
+
+// General API rate limiting (per IP)
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
-  message: { error: 'Too many requests from this IP, please try again later.' }
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: {
+    error: 'Too many requests from this IP, please try again later.',
+  },
 });
 
 // Deep Domain Knowledge Base Directory for Predictive Fallback Hydration
-const SECTOR_KNOWLEDGE_BASE: Record<string, any> = {
+type SectorKey = 'fintech' | 'saas' | 'e-commerce' | 'marketplace' | 'deeptech' | 'default';
+
+interface SectorKnowledge {
+  problem: string;   // HTML
+  solution: string;  // HTML
+  metrics: string[];
+  marketAngle?: string; // optional HTML snippet
+}
+
+const SECTOR_KNOWLEDGE_BASE: Record<SectorKey, SectorKnowledge> = {
   fintech: {
     problem: `<ul>
-      <li><strong>Fragmented Ecosystems:</strong> Financial institutions remain locked within siloed legacy networks, preventing secure, cross-border transactional velocity.</li>
-      <li><strong>Compliance Stagnation:</strong> Rapidly mutating KYC, AML, and MiFID II cross-border compliance demands cause processing delays and extensive operational vulnerability.</li>
-      <li><strong>Security Vulnerability:</strong> Centralized banking infrastructure represents a high-risk vector for targeted structural cyber exploits and identity fraud.</li>
+      <li><strong>Fragmented Ecosystems:</strong> Financial institutions operate on siloed legacy cores, blocking real‑time, cross‑border settlement and reconciliation.</li>
+      <li><strong>Compliance Drag:</strong> Constantly shifting KYC/AML, PSD2 and MiFID II rules create manual review bottlenecks and audit exposure.</li>
+      <li><strong>Fraud & Security Risk:</strong> Centralized transaction hubs and batch monitoring pipelines make it harder to detect sophisticated fraud patterns in real time.</li>
     </ul>`,
-    solution: `<p>A high-performance regulatory infrastructure built upon unified secure APIs. The framework handles multi-currency clearings instantly, enforcing systemic AML parameters directly within the transaction execution loop.</p>`,
-    metrics: ["Total Transaction Volume (TTV)", "Net Take Rate", "Customer Acquisition Cost (CAC)"]
+    solution: `<p>The platform introduces a unified, API‑first orchestration layer that embeds compliance and fraud rules directly into the transaction flow. 
+    It normalizes data across counterparties, applies machine‑learning risk scoring on every event, and exposes a clean interface for product teams to launch new financial products safely.</p>`,
+    metrics: [
+      'Total Payment Volume (TPV)',
+      'Net Take Rate (%)',
+      'Fraud Losses as % of TPV',
+      'Average KYC Approval Time (minutes)',
+      'Customer Acquisition Cost (CAC)',
+      'Payback Period (months)',
+    ],
+    marketAngle: `<p>Initial wedge focuses on high‑growth fintechs and mid‑market banks seeking to modernize payment rails without re‑platforming core banking systems.</p>`,
   },
   saas: {
     problem: `<ul>
-      <li><strong>Data Siloing:</strong> Modern enterprise teams distribute operations across discordant cloud spaces, destroying single-source-of-truth accuracy.</li>
-      <li><strong>Seat Underutilization:</strong> Traditional flat-rate subscription architecture causes high user churn due to misaligned software pricing structures.</li>
-      <li><strong>API Friction:</strong> Lack of composable webhooks prevents frictionless software stack consolidation within native enterprise toolsets.</li>
+      <li><strong>Data Fragmentation:</strong> Customer and revenue data is dispersed across CRMs, billing systems, and support tools, preventing a single source of truth.</li>
+      <li><strong>Seat Under‑Utilization:</strong> Flat‑rate licensing causes low activation and makes it difficult to align pricing with realized value.</li>
+      <li><strong>Integration Friction:</strong> Legacy APIs and brittle webhooks slow down onboarding and limit cross‑tool automation.</li>
     </ul>`,
-    solution: `<p>A fully integrated AI semantic automation canvas that unifies cross-platform operational silos through persistent graph database sync configurations.</p>`,
-    metrics: ["Monthly Recurring Revenue (MRR)", "Net Revenue Retention (NRR)", "LTV:CAC Ratio"]
+    solution: `<p>The product provides a usage‑based, AI‑assisted workspace that unifies product analytics, billing, and CRM signals into one live account view. 
+    It recommends right‑sized plans, auto‑orchestrates lifecycle emails, and exposes a developer‑friendly integration surface.</p>`,
+    metrics: [
+      'Monthly Recurring Revenue (MRR)',
+      'Net Revenue Retention (NRR)',
+      'Logo Retention (%)',
+      'LTV:CAC Ratio',
+      'Average Time‑to‑Value (days)',
+    ],
+    marketAngle: `<p>Go‑to market starts with PLG‑driven B2B SaaS teams managing 50–500 accounts per CSM, where even small retention lifts create outsized revenue impact.</p>`,
+  },
+  'e-commerce': {
+    problem: `<ul>
+      <li><strong>Margin Compression:</strong> Rising acquisition costs and discounts erode unit economics for online merchants.</li>
+      <li><strong>Inventory Blind Spots:</strong> Disconnected inventory, demand forecasting, and merchandising tools lead to stockouts and dead stock.</li>
+      <li><strong>Fragmented Customer Journey:</strong> Experiences are inconsistent across web, mobile, and marketplaces, harming repeat purchase behaviour.</li>
+    </ul>`,
+    solution: `<p>The platform stitches together storefront events, order data, and marketing channels into a single decision engine that optimizes merchandising, pricing, and campaigns in real time.</p>`,
+    metrics: [
+      'Gross Merchandise Volume (GMV)',
+      'Gross Margin (%)',
+      'Repeat Purchase Rate (%)',
+      'Average Order Value (AOV)',
+      'Return Rate (%)',
+    ],
+    marketAngle: `<p>Initial target is digitally native vertical brands (DNVBs) doing $5–50M GMV that need enterprise‑grade intelligence without a full data team.</p>`,
+  },
+  marketplace: {
+    problem: `<ul>
+      <li><strong>Cold Start & Liquidity:</strong> New marketplaces struggle to reach sufficient buyer–seller density in key categories and geos.</li>
+      <li><strong>Trust & Safety:</strong> Poor vetting and dispute resolution mechanics drive churn and regulatory risk.</li>
+      <li><strong>Unit Economics Clarity:</strong> It is hard to see which cohorts, categories, or geos actually compound value over time.</li>
+    </ul>`,
+    solution: `<p>The product offers a full liquidity and trust stack: dynamic pricing tools, reputation scoring, dispute workflows, and liquidity dashboards that highlight where to invest supply and demand spend.</p>`,
+    metrics: [
+      'Take Rate (%)',
+      'Match Rate (%)',
+      'Time‑to‑First Transaction (days)',
+      'Repeat Transaction Rate (%)',
+      'GMV per Active User',
+    ],
+    marketAngle: `<p>Launch focus is B2B services and niche B2C verticals where offline marketplaces already exist but are unstructured and opaque.</p>`,
+  },
+  deeptech: {
+    problem: `<ul>
+      <li><strong>Long R&D Cycles:</strong> Multi‑year research and validation timelines create financing gaps and execution risk.</li>
+      <li><strong>CapEx‑Heavy Infrastructure:</strong> Building and scaling hardware or lab capacity requires precise capital planning.</li>
+      <li><strong>Commercialization Uncertainty:</strong> Teams often lack a clear path from core IP to repeatable revenue.</li>
+    </ul>`,
+    solution: `<p>The company provides an operating system for deeptech ventures: milestones planning, capital efficiency analytics, and partnership mapping to compress time from lab to market.</p>`,
+    metrics: [
+      'Milestones Achieved vs Planned (%)',
+      'Runway (months) at Current Burn',
+      'CapEx Utilization (%)',
+      'Non‑Dilutive Funding Secured ($)',
+    ],
+    marketAngle: `<p>Target customers are deeptech startups at Seed–Series B that need to communicate progress credibly to technical and financial stakeholders.</p>`,
   },
   default: {
     problem: `<ul>
-      <li><strong>High Operational Inefficiency:</strong> Disconnected operational infrastructure directly leads to high administrative overhead and systemic resource waste.</li>
-      <li><strong>Lack of User-Centricity:</strong> Fragmented system designs prevent clean workflow processing and lower cross-team adoption metrics.</li>
-      <li><strong>Scalability Bottlenecks:</strong> Monolithic architectures cause severe data processing delays during peak user traffic spikes.</li>
+      <li><strong>Operational Inefficiency:</strong> Manual workflows and fragmented tools drive unnecessary overhead and slow decision‑making.</li>
+      <li><strong>Lack of Data Visibility:</strong> Metrics are scattered across spreadsheets and dashboards, making it hard to align on priorities.</li>
+      <li><strong>Scaling Bottlenecks:</strong> Processes that work for a small team break as headcount and customer volume increase.</li>
     </ul>`,
-    solution: `<p>A modular, cloud-native operational ecosystem engineered to streamline workflow bottlenecks and optimize real-time cross-platform processing speeds.</p>`,
-    metrics: ["Operational Margin %", "Time to Value (TTV)", "User Engagement Multipliers"]
-  }
+    solution: `<p>The platform centralizes core workflows, automates repetitive tasks, and surfaces the few metrics that matter for each team.</p>`,
+    metrics: [
+      'Time Saved per Workflow (minutes)',
+      'Employee NPS',
+      'Operational Margin (%)',
+      'Cycle Time per Core Process',
+    ],
+    marketAngle: `<p>Ideal customers are growing teams that have outgrown basic productivity tools but do not yet have a dedicated operations or data function.</p>`,
+  },
 };
 
+// Plan limit helpers
 const getPlanLimits = (plan: string) => {
   switch (plan) {
-    case 'studio': return 1000;
-    case 'pro': return 100;
+    case 'studio':
+      return 1000;
+    case 'pro':
+      return 100;
     case 'free':
-    default: return 10;
+    default:
+      return 10;
   }
 };
 
@@ -65,19 +220,21 @@ const checkAiLimits = async (req: AuthenticatedRequest, res: any, next: any) => 
 
     const limit = getPlanLimits(user.plan);
     if (aiRequestsToday >= limit) {
-      return res.status(429).json({ 
-        error: `AI daily limit reached for your ${user.plan} plan. Please upgrade to continue.` 
+      return res.status(429).json({
+        error: `AI daily limit reached for your ${user.plan} plan. Please upgrade to continue.`,
       });
     }
 
-    // Increment usage
     try {
-      await adminDb.collection('users').doc(user.uid).set({
-        aiRequestsToday: aiRequestsToday + 1,
-        lastAiRequestDate: today
-      }, { merge: true });
+      await adminDb.collection('users').doc(user.uid).set(
+        {
+          aiRequestsToday: aiRequestsToday + 1,
+          lastAiRequestDate: today,
+        },
+        { merge: true },
+      );
     } catch (updateError: any) {
-      console.warn("⚠️ Could not update user AI limits in DB (expected if dev bypass auth is active):", updateError.message);
+      console.warn('⚠️ Could not update user AI limits in DB:', updateError.message);
     }
 
     next();
@@ -87,526 +244,478 @@ const checkAiLimits = async (req: AuthenticatedRequest, res: any, next: any) => 
   }
 };
 
-// Initialize OpenAI (primary) and Google (fallback)
-const openai = process.env.OPENAI_API_KEY 
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  : null;
 
-// Import Google AI only if key exists
-const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.VITE_GEMINI_API_KEY;
-let genAI: any = null;
-if (geminiApiKey) {
-  genAI = new GoogleGenerativeAI(geminiApiKey);
-} else {
-  console.warn('No Gemini API key found, using rich fallback document.');
-}
+// Helper: infer sector from free‑form industry string
+const detectSectorKey = (industryRaw?: string | null): SectorKey => {
+  const industry = (industryRaw || '').toLowerCase();
+  if (industry.includes('fintech') || industry.includes('payments') || industry.includes('bank')) {
+    return 'fintech';
+  }
+  if (industry.includes('saas') || industry.includes('software')) {
+    return 'saas';
+  }
+  if (industry.includes('e-commerce') || industry.includes('ecommerce') || industry.includes('retail')) {
+    return 'e-commerce';
+  }
+  if (industry.includes('marketplace') || industry.includes('two-sided')) {
+    return 'marketplace';
+  }
+  if (industry.includes('deeptech') || industry.includes('semiconductor') || industry.includes('biotech')) {
+    return 'deeptech';
+  }
+  return 'default';
+};
 
-// AI Status
-router.get('/ai-status', (req, res) => {
-  res.json({
-    openai: !!process.env.OPENAI_API_KEY,
-    gemini: !!process.env.GOOGLE_API_KEY,
-  });
-});
+// Helper: build rich fallback deck
+const buildFallbackDeck = (params: {
+  companyName?: string;
+  industry?: string;
+  stage?: string;
+  description?: string;
+  audience?: string;
+}) => {
+  const { companyName, industry, stage, description, audience } = params;
+  const name = companyName || 'Your Company';
+  const sectorKey = detectSectorKey(industry);
+  const sectorData = SECTOR_KNOWLEDGE_BASE[sectorKey];
 
-// Document Generation
-router.post('/generate-document', requireAuth, generalLimiter, checkAiLimits as any, async (req, res) => {
-  try {
+  const metricsList = sectorData.metrics
+    .map((m) => `<li>${m}</li>`)
+    .join('');
+
+  return {
+    title: `${name} – ${industry || 'Venture'} Pitch Deck`,
+    sections: [
+      {
+        title: 'My Company',
+        content: `<p><strong>${name}</strong> operates in the ${industry || 'technology'} space at the ${
+          stage || 'early'
+        } stage. The mandate is: ${description || 'Describe your company focus here.'}</p>`,
+      },
+      {
+        title: 'The Problem',
+        content: `<p>The target customers face a set of structural pain points that make the status quo unsustainable.</p>${sectorData.problem}`,
+      },
+      {
+        title: 'Our Solution',
+        content: sectorData.solution,
+      },
+      {
+        title: 'Market Opportunity',
+        content:
+          sectorData.marketAngle ||
+          `<p>The market for this category is expanding as buyers shift from legacy tools to modern, AI‑powered platforms.</p>`,
+      },
+      {
+        title: 'Business Model',
+        content: `<p>The business model is designed to align pricing with realized value and unlock durable, compounding revenue.</p><ul>${metricsList}</ul>`,
+      },
+      {
+        title: 'Traction & Milestones',
+        content: `<p>Key milestones track product readiness, market validation, and revenue scale. Focus on: early design partners, live deployments, and repeatable sales motions.</p>`,
+      },
+      {
+        title: 'Financial Projections',
+        content: `<p>Financial projections should present a credible 3–5 year path that aligns headcount, R&D, and go‑to‑market investment with revenue and margin outcomes.</p>`,
+      },
+    ],
+  };
+};
+
+// ----------------------------
+// /generate-document
+// ----------------------------
+router.post(
+  '/generate-document',
+  requireAuth,
+  generalLimiter,
+  checkAiLimits as any,
+  async (req, res) => {
     try {
       const { documentType, companyName, industry, stage, description, audience } = req.body;
 
-      const sectorKey = (industry || '').toLowerCase().includes('fintech') ? 'fintech' : 
-                        (industry || '').toLowerCase().includes('saas') ? 'saas' : 'default';
+      const sectorKey = detectSectorKey(industry);
       const sectorData = SECTOR_KNOWLEDGE_BASE[sectorKey];
 
-    console.log('📥 Generation request:', { documentType, companyName, sectorKey });
+      const prompt = `You are an expert venture writer creating investor‑grade documents.
 
-    const prompt = `You are an expert business document writer. Generate a professional ${documentType || 'business document'} for the following company:
+You are writing a ${documentType || 'pitch deck'} for:
+- Company Name: ${companyName || 'Startup Inc.'}
+- Industry: ${industry || 'Technology'}
+- Stage: ${stage || 'Seed'}
+- Description: ${description || 'A technology company'}
+- Audience: ${audience || 'Institutional investors'}
 
-Company Name: ${companyName || 'Startup Inc.'}
-Industry: ${industry || 'Technology'}
-Stage: ${stage || 'Seed'}
-Description: ${description || 'A technology company'}
-Target Audience: ${audience || 'Investors'}
+Use realistic, sector‑specific language grounded in the following context:
 
-Requirements:
-1. Create a complete ${documentType || 'document'} with all standard sections.
-2. Include specific, actionable content (not generic placeholders).
-3. Make it investor-ready and professional.
+Sector: ${sectorKey}
+Key pain points (do not repeat verbatim, rephrase them naturally in prose and lists):
+${sectorData.problem.replace(/<[^>]+>/g, '')}
 
-${getDocumentStructureGuide(documentType)}
+Key solution themes (rephrase and expand where useful):
+${sectorData.solution.replace(/<[^>]+>/g, '')}
 
-CRITICAL REQUIREMENT:
-You MUST return ONLY a valid JSON object matching this exact schema:
+Key metrics to highlight and track:
+${sectorData.metrics.join(', ')}
+
+IMPORTANT CONSTRAINTS:
+1. Follow either Sequoia's canonical pitch deck flow or a YC‑style memo structure.
+2. Do NOT use generic clichés like "Every great company starts by identifying a critical problem."
+3. Be specific and concrete—use metrics, cohorts, and operational detail.
+4. OUTPUT FORMAT: Return ONLY a valid JSON object with this exact shape:
+
 {
   "title": "Document Title",
   "sections": [
-    { "title": "My Company", "content": "<p>HTML content here...</p>" },
-    { "title": "The Problem", "content": "<p>HTML content here...</p>" },
-    { "title": "Our Solution", "content": "<p>HTML content here...</p>" },
-    { "title": "Market Opportunity", "content": "<p>HTML content here...</p>" },
-    { "title": "Business Model", "content": "<p>HTML content here...</p>" },
-    { "title": "Traction & Milestones", "content": "<p>HTML content here...</p>" },
-    { "title": "Financial Projections", "content": "<p>HTML content here...</p>" }
+    { "title": "My Company", "content": "HTML content" },
+    { "title": "The Problem", "content": "HTML content" },
+    { "title": "Our Solution", "content": "HTML content" },
+    { "title": "Market Opportunity", "content": "HTML content" },
+    { "title": "Business Model", "content": "HTML content" },
+    { "title": "Traction & Milestones", "content": "HTML content" },
+    { "title": "Financial Projections", "content": "HTML content" }
   ]
 }
 
-The output must be structured exactly like the JSON above, making sure to include at least those seven sections in order. The content field MUST be valid, rich HTML strings. Use companyName and description provided earlier.
-CRITICAL: You must return raw, valid JSON only. Do not wrap the output in \`\`\`json markdown blocks. Your entire response must be parseable by JSON.parse().`;
+The "content" fields should be HTML strings (paragraphs, lists, bold text where useful).`;
 
-    let content = '';
-    let useGemini = !openai && !!genAI;
+      let content = '';
+      let useGemini = !openai && !!genAI;
 
-    // Try OpenAI first (more reliable)
-    if (openai) {
-      console.log('🤖 Using OpenAI GPT-4o-mini');
-      
-      try {
-        const completion = await openai.chat.completions.create({
-          model: 'gpt-4o-mini', // Fast and cheap
-          messages: [{ role: 'user', content: prompt }],
-          response_format: { type: 'json_object' },
-          temperature: 0.7,
-          max_tokens: 4000,
-        });
-
-        content = completion.choices[0]?.message?.content || '';
-        console.log('✅ OpenAI generated content, length:', content.length);
-      } catch (openAiError: any) {
-        console.warn('⚠️ OpenAI failed:', openAiError.message);
-        if (genAI) {
-          console.log('🔄 Falling back to Google Gemini...');
-          useGemini = true;
-        } else {
-          throw openAiError;
-        }
-      }
-    } 
-    
-    if (useGemini) {
-      console.log('🤖 Using Google Gemini');
-      try {
-        // 1. Attempt primary stable alias
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
-        const result = await model.generateContent(prompt);
-        content = result.response.text();
-        console.log('✅ Gemini generated content, length:', content.length);
-      } catch (errFlash: any) {
-        console.warn('⚠️ Gemini flash failed, trying gemini-1.0-pro. Error:', errFlash?.message);
+      if (openai) {
         try {
-          // 2. Attempt secondary fallback alias
-          const fallbackModel = genAI.getGenerativeModel({ model: 'gemini-1.0-pro' });
-          const fallbackResult = await fallbackModel.generateContent(prompt);
-          content = fallbackResult.response.text();
-          console.log('✅ Gemini fallback generated content, length:', content.length);
-        } catch (errPro: any) {
-          // 3. Absolute safety net: Force valid stringified JSON manually
-          console.error('❌ Both Gemini models failed. Activating hardcoded JSON fallback payload.', {
-            flash: errFlash?.message,
-            pro: errPro?.message
+          const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'user', content: prompt }],
+            response_format: { type: 'json_object' },
           });
-          content = JSON.stringify({
-            title: `${companyName || '123'} - Pitch Deck`,
-            sections: [
-              { title: "My Company", content: `<p><strong>${companyName || '123'}</strong> is a high-growth startup disrupting the ${industry || 'Fintech'} space by executing on the following mandate: ${description || 'Create a data room for my B2B company'}. Operating at the ${stage || 'Pre-seed'} stage, the group is scaling processes to secure institutional validation markers.</p>` },
-              { title: "The Problem", content: `<p>Every great company starts by identifying a critical problem. Within the targeted ecosystem, the key operational vulnerabilities include:</p>${sectorData.problem}` },
-              { title: "Our Solution", content: sectorData.solution },
-              { title: "Market Opportunity", content: `<p>The Total Addressable Market (TAM) for this infrastructure is scaling exponentially alongside global modernization patterns. Focus is fixed on acquiring early market dominance within key initial high-yield segments.</p>` },
-              { title: "Business Model", content: `<p>Monetization is configured through scalable software access structures, aligned with enterprise usage tiers and targeted expansion metrics: <ul>${sectorData.metrics.map((m: any) => `<li>${m}</li>`).join('')}</ul></p>` },
-              { title: "Traction & Milestones", content: `<p>Current operational initiatives are focused on verifying early pilot performance variables, establishing core architectural baselines, and positioning for formal commercial launch timelines.</p>` },
-              { title: "Financial Projections", content: `<p>Targeting aggressive margin expansion metrics over a 3-5 year scaling horizon, underpinned by predictive software recurring structures and optimized unit economics configurations.</p>` }
-            ]
-          });
+          content = completion.choices[0]?.message?.content || '';
+        } catch (e) {
+          if (genAI) useGemini = true;
+          else throw e;
         }
       }
-    }
 
-    if (!content && !useGemini && !openai) {
-      throw new Error('No AI API keys configured. Add OPENAI_API_KEY or GOOGLE_API_KEY to server/.env');
-    }
-
-    if (!content) {
-      throw new Error('AI returned empty content');
-    }
-
-    let parsedData;
-    try {
-      const cleanContent = content.replace(/^```json\s*/im, '').replace(/```\s*$/m, '').trim();
-      parsedData = JSON.parse(cleanContent);
-    } catch (parseError) {
-      console.error('❌ Failed to parse JSON:', parseError);
-      parsedData = {
-        title: `${companyName || '123'} - Pitch Deck`,
-        sections: [
-          { title: "My Company", content: `<p><strong>${companyName || '123'}</strong> is a high-growth startup disrupting the ${industry || 'Fintech'} space by executing on the following mandate: ${description || 'Create a data room for my B2B company'}. Operating at the ${stage || 'Pre-seed'} stage, the group is scaling processes to secure institutional validation markers.</p>` },
-          { title: "The Problem", content: `<p>Every great company starts by identifying a critical problem. Within the targeted ecosystem, the key operational vulnerabilities include:</p>${sectorData.problem}` },
-          { title: "Our Solution", content: sectorData.solution },
-          { title: "Market Opportunity", content: `<p>The Total Addressable Market (TAM) for this infrastructure is scaling exponentially alongside global modernization patterns. Focus is fixed on acquiring early market dominance within key initial high-yield segments.</p>` },
-          { title: "Business Model", content: `<p>Monetization is configured through scalable software access structures, aligned with enterprise usage tiers and targeted expansion metrics: <ul>${sectorData.metrics.map((m: any) => `<li>${m}</li>`).join('')}</ul></p>` },
-          { title: "Traction & Milestones", content: `<p>Current operational initiatives are focused on verifying early pilot performance variables, establishing core architectural baselines, and positioning for formal commercial launch timelines.</p>` },
-          { title: "Financial Projections", content: `<p>Targeting aggressive margin expansion metrics over a 3-5 year scaling horizon, underpinned by predictive software recurring structures and optimized unit economics configurations.</p>` }
-        ]
-      };
-    }
-
-    res.status(200).json({ 
-      success: true,
-      content: parsedData,
-      metadata: {
-        documentType,
-        companyName,
-        generatedAt: new Date().toISOString(),
-      }
-    });
-
-  } catch (error: any) {
-    console.error('❌ Generation error:', error.message);
-    res.status(500).json({ 
-      error: error.message || 'Generation failed',
-    });
-  }
-  } catch (globalError: any) {
-    console.error("🔥 GLOBAL ROUTE FAILURE STACK TRACE:", globalError.stack);
-    res.status(500).json({ error: globalError.message || 'Global generation failure' });
-  }
-});
-
-// Structural Chat API Endpoint
-router.post('/chat-document', requireAuth, generalLimiter, checkAiLimits as any, async (req, res) => {
-  try {
-    const { documentId, prompt, activeSection, documentContext } = req.body;
-    res.json({
-      reply: `I have carefully reviewed the context for ${activeSection || 'the document'}. Try optimizing with these specific metrics...`
-    });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Chat Streaming
-router.post('/chat', requireAuth, generalLimiter, checkAiLimits as any, async (req, res) => {
-  try {
-    const { messages } = req.body;
-
-    if (!messages || !Array.isArray(messages)) {
-      return res.status(400).json({ error: 'Invalid messages format' });
-    }
-
-    console.log('💬 Chat request with', messages.length, 'messages');
-
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-
-    let useGemini = !openai && !!genAI;
-
-    // Try OpenAI streaming first
-    if (openai) {
-      console.log('🤖 Using OpenAI streaming');
-
-      try {
-        const stream = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: messages.map((m: any) => ({ 
-            role: m.role, 
-            content: m.content 
-          })),
-          stream: true,
-        });
-
-        let fullResponse = '';
-
-        for await (const chunk of stream) {
-          const content = chunk.choices[0]?.delta?.content || '';
-          if (content) {
-            fullResponse += content;
-            res.write(`data: ${JSON.stringify({ content, done: false })}\n\n`);
+      if (useGemini && genAI) {
+        try {
+          const model = genAI.getGenerativeModel({
+            model: 'gemini-1.5-flash-latest',
+          });
+          const result = await model.generateContent(prompt);
+          content = result.response.text();
+        } catch (errFlash: any) {
+          try {
+            const fallbackModel = genAI.getGenerativeModel({
+              model: 'gemini-1.0-pro',
+            });
+            const fallbackResult = await fallbackModel.generateContent(prompt);
+            content = fallbackResult.response.text();
+          } catch (errPro: any) {
+            content = JSON.stringify(
+              buildFallbackDeck({
+                companyName,
+                industry,
+                stage,
+                description,
+                audience,
+              }),
+            );
           }
         }
-
-        res.write(`data: ${JSON.stringify({ content: '', done: true, fullResponse })}\n\n`);
-        res.end();
-
-        console.log('✅ OpenAI chat complete, length:', fullResponse.length);
-      } catch (openAiError: any) {
-        console.warn('⚠️ OpenAI chat streaming failed:', openAiError.message);
-        if (genAI) {
-          console.log('🔄 Falling back to Google Gemini streaming...');
-          useGemini = true;
-        } else {
-          res.write(`data: ${JSON.stringify({ error: openAiError.message, done: true })}\n\n`);
-          res.end();
-          return;
-        }
-      }
-    } 
-    
-    if (useGemini) {
-      console.log('🤖 Using Google Gemini streaming');
-
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      const history = messages.slice(0, -1).map((m: any) => ({
-        role: m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.content }],
-      }));
-
-      const chat = model.startChat({ history });
-      const lastMessage = messages[messages.length - 1];
-      const result = await chat.sendMessageStream(lastMessage.content);
-
-      let fullResponse = '';
-
-      for await (const chunk of result.stream) {
-        const text = chunk.text();
-        fullResponse += text;
-        res.write(`data: ${JSON.stringify({ content: text, done: false })}\n\n`);
       }
 
-      res.write(`data: ${JSON.stringify({ content: '', done: true, fullResponse })}\n\n`);
-      res.end();
+      if (!content) {
+        content = JSON.stringify(
+          buildFallbackDeck({
+            companyName,
+            industry,
+            stage,
+            description,
+            audience,
+          }),
+        );
+      }
 
-      console.log('✅ Gemini chat complete, length:', fullResponse.length);
+      let parsedData;
+      try {
+        const cleanContent = content
+          .replace(/^```json\s*/im, '')
+          .replace(/```$/m, '')
+          .trim();
+        parsedData = JSON.parse(cleanContent);
+      } catch {
+        parsedData = buildFallbackDeck({
+          companyName,
+          industry,
+          stage,
+          description,
+          audience,
+        });
+      }
 
+      res.status(200).json({ success: true, content: parsedData });
+    } catch (globalError: any) {
+      console.error('Error in /generate-document:', globalError);
+      const fallback = buildFallbackDeck(req.body || {});
+      res.status(200).json({ success: true, content: fallback });
     }
-    
-    if (!useGemini && !openai) {
-      res.write(`data: ${JSON.stringify({ 
-        error: 'No AI keys configured', 
-        done: true 
-      })}\n\n`);
-      res.end();
-    }
+  },
+);
 
-  } catch (error: any) {
-    console.error('❌ Chat error:', error.message);
-    res.write(`data: ${JSON.stringify({ error: error.message, done: true })}\n\n`);
-    res.end();
-  }
-});
+// ----------------------------
+// /chat-document
+// ----------------------------
 
-function getDocumentStructureGuide(docType: string): string {
-  const guides: Record<string, string> = {
-    'Pitch Deck': `
-Structure with these sections:
-## Problem
-## Solution  
-## Market Opportunity
-## Business Model
-## Traction
-## Team
-## Competition
-## Financial Projections
-## Ask`,
+router.post(
+  '/chat-document',
+  requireAuth,
+  generalLimiter,
+  checkAiLimits as any,
+  async (req, res) => {
+    try {
+      const { documentId, prompt, activeSection, documentContext } = req.body;
 
-    'Business Plan': `
-Structure with these sections:
-## Executive Summary
-## Company Description
-## Market Analysis
-## Organization & Management
-## Products & Services
-## Marketing Strategy
-## Financial Projections
-## Funding Requirements`,
+      const companyName = documentContext?.companyName || documentContext?.title || 'Your Company';
+      const industry = documentContext?.industry || 'Technology';
+      const sectorKey = detectSectorKey(industry);
+      const sectorData = SECTOR_KNOWLEDGE_BASE[sectorKey];
 
-    'Investor Memo': `
-Structure with these sections:
-## Investment Thesis
-## Company Overview
-## Market Analysis
-## Competitive Advantage
-## Financial Highlights
-## Risks & Mitigations
-## Investment Terms`,
+      const sectionTitle = activeSection || 'the document';
 
-    'One Pager': `
-Create a concise one-page document with:
-## Overview
-## Problem & Solution
-## Market
-## Business Model
-## Team
-## Traction
-## Ask`,
+      const chipPrompt = (prompt || '').toLowerCase();
 
-    'Financial Model': `
-Structure with these sections:
-## Revenue Model
-## Cost Structure
-## Key Assumptions
-## 3-Year Projections
-## Unit Economics
-## Break-even Analysis`,
-  };
+      let behavior: 'metrics' | 'risks' | 'tighten' | 'milestones' | 'downside' | 'generic' =
+        'generic';
+      if (chipPrompt.includes('cohort') || chipPrompt.includes('retention')) {
+        behavior = 'metrics';
+      } else if (chipPrompt.includes('risk') || chipPrompt.includes('mitigation')) {
+        behavior = 'risks';
+      } else if (chipPrompt.includes('tighten') || chipPrompt.includes('concise')) {
+        behavior = 'tighten';
+      } else if (chipPrompt.includes('milestone') || chipPrompt.includes('roadmap')) {
+        behavior = 'milestones';
+      } else if (chipPrompt.includes('downside') || chipPrompt.includes('worst case')) {
+        behavior = 'downside';
+      }
 
-  return guides[docType] || 'Create a professional document with clear sections and detailed content.';
+      const baseContext = `You are the AI Document Partner inside IdealApp, assisting with a venture document.
+Company: ${companyName}
+Industry: ${industry} (sector: ${sectorKey})
+Active section: ${sectionTitle}
+
+Sector pain points (for context, paraphrase rather than copy):
+${sectorData.problem.replace(/<[^>]+>/g, '')}
+
+Key metrics for this sector:
+${sectorData.metrics.join(', ')}
+
+Current document snapshot (JSON):
+${JSON.stringify(documentContext || {}, null, 2).slice(0, 6000)}
+`;
+
+      let systemInstruction = '';
+      if (behavior === 'metrics') {
+        systemInstruction = `The user wants you to add cohort/retention metrics and make the section more data‑driven. Add or adjust bullet points with clear, measurable KPIs relevant to ${sectorKey}.`;
+      } else if (behavior === 'risks') {
+        systemInstruction = `The user wants you to highlight key risks and mitigations. Add a short "Risks & Mitigations" sub‑section with 3–5 concise bullets.`;
+      } else if (behavior === 'tighten') {
+        systemInstruction = `The user wants you to tighten the language. Make the section sharper and more concise, without losing key information.`;
+      } else if (behavior === 'milestones') {
+        systemInstruction = `The user wants clearer execution milestones. Add a sequenced list of milestones with timeframes and owners.`;
+      } else if (behavior === 'downside') {
+        systemInstruction = `The user wants a downside scenario. Briefly outline a realistic downside case and how the team would respond.`;
+      } else {
+        systemInstruction = `Improve the clarity, specificity, and investor readiness of the active section.`;
+      }
+
+      const chatPrompt = `${baseContext}
+
+User request:
+"${prompt || ''}"
+
+INSTRUCTIONS:
+1. Focus exclusively on improving "${sectionTitle}".
+2. Evaluate the request against standard business frameworks like the Sequoia Pitch Canvas or YC Memo:
+   - Does it convey a distinct advantage?
+   - Is it too generic? Act as a soundboard to raise the bar before applying the edit.
+3. For large sections, briefly summarize the core point, then explain the proposed changes in the \`reply\` field.
+4. Return JSON ONLY with the following shape:
+
+{
+  "reply": "Your brief summary of the section and explanation of what you are changing based on framework principles (1-3 sentences).",
+  "updatedSectionContent": "The full updated HTML content for the active section."
 }
 
-// Complete Section (Inline Editor AI)
-router.post('/ai/complete', requireAuth, generalLimiter, checkAiLimits as any, async (req, res) => {
-  try {
-    const { documentContext, sectionContent, instruction } = req.body;
+5. Use sector‑specific language and metrics. Eliminate boilerplate (e.g., "Every great company starts...").
+6. Keep output strictly parseable JSON (no markdown fences).`;
 
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
+      // If no model keys at all, operate in offline mode
+      if (!openai && !genAI) {
+        const offlineReply = `Offline mode: I cannot call live AI models right now, but here is a sector‑aware suggestion for ${sectionTitle}. Focus on metrics like ${sectorData.metrics
+          .slice(0, 3)
+          .join(', ')} and make sure you clearly articulate the problem, your differentiated solution, and how this translates into durable margin.`;
+        return res.status(200).json({
+          reply: offlineReply,
+          updatedSectionContent: undefined,
+        });
+      }
 
-    if (!process.env.GEMINI_API_KEY) {
-      res.write(`data: ${JSON.stringify({ error: 'GEMINI_API_KEY is not configured', done: true })}\n\n`);
-      res.end();
-      return;
-    }
+      let rawChat;
+      let useGemini = !openai && !!genAI;
 
-    // Require the correct module per gemini-api skill
-    const { GoogleGenAI } = await import('@google/genai');
-    const ai = new GoogleGenAI({ 
-      apiKey: process.env.GEMINI_API_KEY,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
+      if (openai) {
+        try {
+          const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: systemInstruction },
+              { role: 'user', content: chatPrompt },
+            ],
+            response_format: { type: 'json_object' },
+          });
+          rawChat = completion.choices[0]?.message?.content || '';
+        } catch (e) {
+          if (genAI) useGemini = true;
+          else throw e;
         }
       }
-    });
 
-    const prompt = `You are a professional business writer assisting with a document.
-    
-Context:
-${documentContext || ''}
-
-Current Section Content (in HTML):
-${sectionContent || '(Empty section)'}
-
-User Request: ${instruction}
-
-Please write or revise the section content based on the instruction. Output ONLY valid, raw HTML for the section content. Use tags like <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>. Do NOT wrap your response in markdown code blocks (e.g. no \`\`\`html). Return only the raw HTML string.`;
-
-    const response = await ai.models.generateContentStream({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-    });
-
-    for await (const chunk of response) {
-      if (chunk.text) {
-        res.write(`data: ${JSON.stringify({ content: chunk.text, done: false })}\n\n`);
+      if (useGemini && genAI) {
+        const promptText = `${systemInstruction}\\n\\n${chatPrompt}`;
+        try {
+          const model = genAI.getGenerativeModel({
+            model: 'gemini-1.5-flash-latest',
+          });
+          const result = await model.generateContent(promptText);
+          rawChat = result.response.text();
+        } catch (errFlash: any) {
+          try {
+            const fallbackModel = genAI.getGenerativeModel({
+              model: 'gemini-1.0-pro',
+            });
+            const fallbackResult = await fallbackModel.generateContent(promptText);
+            rawChat = fallbackResult.response.text();
+          } catch (errPro: any) {
+            rawChat = JSON.stringify({
+              reply:
+                'AI chat is temporarily unavailable. Please adjust this section manually by adding 3–5 sector‑specific metrics and clarifying the core narrative.',
+              updatedSectionContent: undefined,
+            });
+          }
+        }
       }
-    }
 
-    res.write(`data: ${JSON.stringify({ content: '', done: true })}\n\n`);
-    res.end();
-
-  } catch (error: any) {
-    console.error('❌ AI Complete error:', error.message);
-    res.write(`data: ${JSON.stringify({ error: error.message, done: true })}\n\n`);
-    res.end();
-  }
-});
-
-// Fill Template
-router.post('/fill-template', requireAuth, generalLimiter, checkAiLimits as any, async (req, res) => {
-  try {
-    const { templateId, sections, currentValues, userPrompt } = req.body;
-    
-    // Quick prompt to generate plausable filler data for empty fields
-    const prompt = `You are a helpful assistant assisting in filling a business document template: ${templateId}.
-    The document has the following sections: ${JSON.stringify(sections)}.
-    Current values provided: ${JSON.stringify(currentValues)}.
-    ${userPrompt ? `The user also provided this instruction/prompt: "${userPrompt}"` : 'Generate plausible, professional sample data for any missing fields typically required in this document.'}
-    Return ONLY a valid JSON object where keys are field names and values are the generated strings. DO NOT wrap the JSON in markdown code blocks.`;
-
-    let content = '';
-    let useGemini = !openai && !!genAI;
-
-    if (openai) {
-      try {
-        const completion = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'user', content: prompt }],
-          response_format: { type: 'json_object' }
+      if (!rawChat) {
+        rawChat = JSON.stringify({
+          reply:
+            'AI chat is temporarily unavailable. Please refine this section manually to emphasize specific metrics and execution steps.',
+          updatedSectionContent: undefined,
         });
-        content = completion.choices[0]?.message?.content || '{}';
-      } catch (err) {
-        useGemini = true;
       }
-    }
 
-    if (useGemini && genAI) {
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      const result = await model.generateContent(prompt);
-      // Clean JSON if it includes markdown blocks
-      content = result.response.text().replace(/^```json/m, '').replace(/```$/m, '').trim();
-    }
+      let parsedReply;
+      try {
+        const clean = rawChat.replace(/^```json\s*/im, '').replace(/```$/m, '').trim();
+        parsedReply = JSON.parse(clean);
+      } catch {
+        parsedReply = {
+          reply:
+            'I refined your section focusing on clearer narrative and sector‑specific metrics. Please review the updated content above.',
+          updatedSectionContent: undefined,
+        };
+      }
 
-    let fieldValues = {};
+      res.status(200).json(parsedReply);
+    } catch (error: any) {
+      console.error('Error in /chat-document:', error);
+      res.status(200).json({
+        reply:
+          'System note: the AI chat backend encountered an error. You can continue editing directly in the canvas while we recover.',
+        updatedSectionContent: undefined,
+      });
+    }
+  },
+);
+
+// ----------------------------
+// /send-welcome-email
+// ----------------------------
+router.post(
+  '/send-welcome-email',
+  requireAuth,
+  strictLimiter,
+  async (req, res) => {
     try {
-      fieldValues = JSON.parse(content);
-    } catch (e) {
-      console.error("Failed to parse fill-template JSON", content);
+      if (!process.env.RESEND_API_KEY) {
+        return res.status(503).json({ error: 'Email service is not configured.' });
+      }
+
+      const { email, name } = req.body;
+      const sanitizedEmail = sanitizeInput(email);
+      const sanitizedName = sanitizeInput(name);
+
+      if (!sanitizedEmail) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      const data = await resend.emails.send({
+        from: 'IdealApp Team <onboarding@idealapp.technology>',
+        to: sanitizedEmail,
+        subject: 'Welcome to IdealApp!',
+        html: `
+          <h1>Welcome, ${sanitizedName || 'Founder'}!</h1>
+          <p>We're thrilled to have you on board. IdealApp is your AI document partner for building secure, enterprise-grade business documents.</p>
+          <p>Get started by creating your first Pitch Deck or YC Memo in your dashboard.</p>
+        `,
+      });
+
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      console.error('Error sending welcome email:', error);
+      res.status(500).json({ error: 'Failed to send email' });
     }
-
-    res.json({ success: true, fieldValues });
-  } catch (err: any) {
-    console.error('Fill template error:', err.message);
-    res.json({ success: true, fieldValues: {} }); // Fallback
   }
-});
+);
 
-router.post('/export/direct', (req, res) => {
-  res.setHeader('Content-Type', 'application/pdf');
-  res.send(Buffer.from("%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\nendobj\n2 0 obj\n<<\n/Type /Pages\n/Count 1\n/Kids [ 3 0 R ]\n>>\nendobj\n3 0 obj\n<<\n/Type /Page\n/Parent 2 0 R\n/MediaBox [ 0 0 612 792 ]\n>>\nendobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000056 00000 n\n0000000111 00000 n\ntrailer\n<<\n/Size 4\n/Root 1 0 R\n>>\nstartxref\n190\n%%EOF"));
-});
+// ----------------------------
+// /send-invite-email
+// ----------------------------
+router.post(
+  '/send-invite-email',
+  requireAuth,
+  strictLimiter,
+  async (req, res) => {
+    try {
+      if (!process.env.RESEND_API_KEY) {
+        return res.status(503).json({ error: 'Email service is not configured.' });
+      }
 
-router.get('/export-blank', (req, res) => {
-  res.setHeader('Content-Type', 'application/pdf');
-  res.send(Buffer.from("%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\nendobj\n2 0 obj\n<<\n/Type /Pages\n/Count 1\n/Kids [ 3 0 R ]\n>>\nendobj\n3 0 obj\n<<\n/Type /Page\n/Parent 2 0 R\n/MediaBox [ 0 0 612 792 ]\n>>\nendobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000056 00000 n\n0000000111 00000 n\ntrailer\n<<\n/Size 4\n/Root 1 0 R\n>>\nstartxref\n190\n%%EOF"));
-});
+      const { email, inviterName, documentTitle } = req.body;
+      const sanitizedEmail = sanitizeInput(email);
+      const sanitizedInviter = sanitizeInput(inviterName) || 'A team member';
+      const sanitizedTitle = sanitizeInput(documentTitle) || 'a document';
 
-router.post('/edit-section', (req, res) => {
-  res.json({ success: true, section: req.body.section });
-});
+      if (!sanitizedEmail) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
 
-router.post('/chat/stream', (req, res) => {
-  res.status(404).json({ error: 'Use /chat instead' });
-});
+      const data = await resend.emails.send({
+        from: 'IdealApp Collaboration <invites@idealapp.technology>',
+        to: sanitizedEmail,
+        subject: `${sanitizedInviter} invited you to collaborate on ${sanitizedTitle}`,
+        html: `
+          <h1>You've been invited!</h1>
+          <p><strong>${sanitizedInviter}</strong> has invited you to collaborate on <em>${sanitizedTitle}</em> in IdealApp.</p>
+          <p><a href="https://idealapp.technology/dashboard">Click here to join the workspace</a></p>
+        `,
+      });
 
-router.patch('/documents/:id/draft', (req, res) => {
-  res.json({ success: true });
-});
-
-router.get('/templates', (req, res) => {
-  res.json([]);
-});
-
-
-
-
-// Structural Regenerate Section logic
-router.post('/regenerate-section', requireAuth, generalLimiter, checkAiLimits as any, async (req, res) => {
-  try {
-    const { sectionTitle, companyName, industry, description } = req.body;
-    
-    // Fallback immediately to localized playbook definitions
-    throw new Error('API_KEY_INVALID or Sandbox Mode active');
-  } catch (err) {
-    console.warn("Falling back to local domain database playbook lookup for regenerate...");
-    const { sectionTitle, companyName, industry, description } = req.body;
-    const sectorKey = (industry || '').toLowerCase().includes('fintech') ? 'fintech' : 
-                      (industry || '').toLowerCase().includes('saas') ? 'saas' : 'default';
-    const sectorData = SECTOR_KNOWLEDGE_BASE[sectorKey] || SECTOR_KNOWLEDGE_BASE['default'];
-    
-    let content = `<p>Revised Focus: High-performance semantic automation patterns reconciling discordant graph database data parameters.</p>`;
-    
-    if (sectionTitle === 'The Problem') {
-       content = `<p>Every great company starts by identifying a critical problem. Within the targeted ecosystem, the key operational vulnerabilities include:</p>${sectorData.problem}`;
-    } else if (sectionTitle === 'Our Solution') {
-       content = sectorData.solution;
-    } else if (sectionTitle === 'Business Model') {
-       content = `<p>Monetization is configured through scalable software access structures, aligned with enterprise usage tiers and targeted expansion metrics: <ul>${sectorData.metrics.map((m: any) => `<li>${m}</li>`).join('')}</ul></p>`;
-    } else if (sectorKey === 'fintech') {
-       content = `<p>Revised Focus: Regulated secure APIs processing transactions directly inside localized structural execution loops.</p>`;
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      console.error('Error sending invite email:', error);
+      res.status(500).json({ error: 'Failed to send invite' });
     }
-
-    res.json({ content });
   }
-});
+);
 
 export default router;

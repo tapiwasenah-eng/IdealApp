@@ -126,4 +126,37 @@ router.get('/pptx/:documentId', async (req, res, next) => {
   }
 });
 
+router.get('/csv/investors', async (req, res, next) => {
+  try {
+    const db = getDb();
+    const investorsRef = await db.collection("users").doc((req as any).user.uid).collection("crm_investors").get();
+    
+    const records = investorsRef.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        firmName: data.firmName || '',
+        partnerName: data.partnerName || '',
+        email: data.email || '',
+        status: data.status || '',
+        lastActivity: data.lastActivity ? new Date(data.lastActivity).toISOString() : ''
+      };
+    });
+
+    const headers = ["Firm Name", "Partner Name", "Email", "Status", "Last Activity"];
+    
+    const csvContent = [
+      headers.join(','),
+      ...records.map(r => `"${r.firmName}","${r.partnerName}","${r.email}","${r.status}","${r.lastActivity}"`)
+    ].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="investors_export.csv"');
+    res.send(csvContent);
+  } catch (error) {
+    console.error("CSV Export Error:", error);
+    res.status(500).json({ error: "Failed to generate CSV export." });
+  }
+});
+
 export default router;

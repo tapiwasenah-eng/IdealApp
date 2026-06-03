@@ -8,7 +8,7 @@ export const AIChatRail: React.FC = () => {
   const { colors, typography, radii, shadows } = designSystem;
   const { activeSectionId, document, investorView } = useDocumentStore();
   const { messages, isTyping, sendMessage, suggestedChips, applyToSection } =
-    useAIChat();
+    useAIChat(document?.id || "");
   const [inputText, setInputText] = useState("");
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
 
@@ -78,7 +78,7 @@ export const AIChatRail: React.FC = () => {
           >
             <div className="flex flex-col gap-2 max-w-[85%]">
               <div
-                className={`p-3 shadow-sm ${msg.role === "ai" ? "prose prose-sm max-w-none" : ""}`}
+                className={`p-3 shadow-sm ${msg.role === "assistant" ? "prose prose-sm max-w-none" : ""}`}
                 style={{
                   backgroundColor:
                     msg.role === "user"
@@ -93,25 +93,25 @@ export const AIChatRail: React.FC = () => {
                   lineHeight: 1.5,
                   borderRadius: "16px",
                   borderBottomRightRadius: msg.role === "user" ? "4px" : "16px",
-                  borderBottomLeftRadius: msg.role === "ai" ? "4px" : "16px",
+                  borderBottomLeftRadius: msg.role === "assistant" ? "4px" : "16px",
                   border:
-                    msg.role === "ai" ? "1px solid rgba(0,0,0,0.05)" : "none",
+                    msg.role === "assistant" ? "1px solid rgba(0,0,0,0.05)" : "none",
                 }}
               >
-                {msg.role === 'ai' ? (
+                {msg.role === 'assistant' ? (
                   <div 
                     className="prose prose-sm max-w-none" 
-                    dangerouslySetInnerHTML={{ __html: msg.text }} 
+                    dangerouslySetInnerHTML={{ __html: msg.content }} 
                   />
                 ) : (
-                  msg.text
+                  msg.content
                 )}
               </div>
 
               {/* Optional actionable buttons from AI */}
-              {msg.actionable && msg.role === "ai" && msg.text && (
+              {msg.role === "assistant" && msg.content && (
                 <button 
-                  onClick={() => applyToSection(msg.text)}
+                  onClick={() => applyToSection(msg.content)}
                   className="self-start px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 rounded-lg transition-colors flex items-center gap-1"
                 >
                   <svg
