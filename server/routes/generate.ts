@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import xss from 'xss';
 import { Resend } from 'resend';
+import { AssemblyAI } from 'assemblyai';
 import { requireAuth, AuthenticatedRequest } from '../authMiddleware';
 import { adminDb } from '../firebase-admin';
 
@@ -13,6 +14,65 @@ import { adminDb } from '../firebase-admin';
 // Keep this file focused on route logic only for Google AI Studio compatibility.
 
 const router = Router();
+
+let assemblyAIClient: AssemblyAI | null = null;
+if (process.env.ASSEMBLYAI_API_KEY) {
+  assemblyAIClient = new AssemblyAI({ apiKey: process.env.ASSEMBLYAI_API_KEY });
+}
+
+// ------------------------------------------------------------------
+// AssemblyAI Voice Integration
+// ------------------------------------------------------------------
+
+router.get('/aura-token', requireAuth, async (req, res) => {
+  try {
+    if (!process.env.ASSEMBLYAI_API_KEY) {
+      return res.status(503).json({ error: 'AssemblyAI API key is missing.' });
+    }
+
+    const response = await fetch('https://streaming.assemblyai.com/v3/token', {
+      method: 'POST',
+      headers: {
+        'Authorization': process.env.ASSEMBLYAI_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ expires_in: 60 })
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('Failed to mint AssemblyAI token:', text);
+      return res.status(response.status).json({ error: 'Failed to mint AssemblyAI token' });
+    }
+
+    const data = await response.json();
+    return res.status(200).json(data);
+  } catch (error) {
+    console.error('Error minting AssemblyAI token:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/audio-to-deck', requireAuth, async (req, res) => {
+  try {
+    const { audioUrl } = req.body;
+    if (!audioUrl) return res.status(400).json({ error: 'audioUrl is required' });
+    if (!assemblyAIClient) return res.status(503).json({ error: 'AssemblyAI API key missing' });
+
+    const transcript = await assemblyAIClient.transcripts.transcribe({
+      audio: audioUrl,
+      language_detection: true,
+      speech_model: 'universal-3-pro' as any, // Cast to any to bypass strict type checking
+      // fallback_models: ['universal-2'],
+      speaker_labels: true,
+    });
+    
+    return res.json({ success: true, transcript });
+  } catch (error) {
+    console.error('AssemblyAI Transcription error:', error);
+    return res.status(500).json({ error: 'Failed to process audio' });
+  }
+});
 
 // ------------------------------------------------------------------
 // Infrastructure, Cyber Security & Email

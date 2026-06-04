@@ -18,6 +18,7 @@ import AuthModal from '../components/auth/AuthModal';
 import { BRAND_ASSETS } from '../lib/brandAssets';
 import { aiService } from '../services/aiService';
 import { exportService } from '../services/exportService';
+import { AuraVoiceGate } from '../components/home/AuraVoiceGate';
 // ── Component Definitions inserted inline ────────────────────────
 const STEPS = [
   { id: 1, label: 'Research sources', color: 'bg-indigo-500' },
@@ -373,13 +374,15 @@ function HeroSection({
   heroPrompt,
   onEdit,
   onDownload,
-  isNavigating
+  isNavigating,
+  onActivateVoice
 }: { 
   onPromptSubmit: (p: any) => void, 
   heroPrompt: string,
   onEdit: (doc: any) => void,
   onDownload: (doc: any) => void,
-  isNavigating?: boolean
+  isNavigating?: boolean,
+  onActivateVoice?: () => void
 }) {
   const [promptIndex, setPromptIndex] = useState(0);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
@@ -465,11 +468,20 @@ function HeroSection({
           <span className="text-xs md:text-sm font-medium text-slate-700">The AI-powered document builder</span>
         </div>
         <h1 className="leading-[1.1] font-extrabold tracking-[-0.04em] text-gray-900 mb-6 font-sans" style={{ fontSize: 'clamp(38px, 6vw, 64px)' }}>
-          Create complete 7-section decks instantly with your AI Partner.
+          Build Investor-Ready Decks on Autopilot.
         </h1>
         <p className="text-[15px] sm:text-[17px] text-gray-500 max-w-2xl mx-auto leading-[1.7] opacity-75">
-          IdealApp handles research, structuring, and execution with predictable accuracy. Build professional, Billion-Dollar SaaS presentations in seconds.
+          IdealApp handles research, structuring, and execution with predictable accuracy. Experience zero-friction voice onboarding or type your prompt below.
         </p>
+        <div className="mt-8 flex flex-col md:flex-row items-center gap-4">
+          <button 
+            type="button"
+            onClick={onActivateVoice}
+            className="flex items-center gap-2 px-8 py-4 bg-indigo-600 text-white rounded-full font-medium shadow-lg hover:bg-indigo-700 transition-all select-none"
+          >
+            <Sparkles size={18} /> Try Voice Onboarding
+          </button>
+        </div>
         <div className="mt-8 text-sm text-gray-500 font-medium">
           Free to start · No credit card required · 180+ templates
         </div>
@@ -1497,6 +1509,7 @@ export default function HomePage() {
   const navigate = useNavigate();
   const [heroPrompt, setHeroPrompt] = useState('');
   const [isNavigating, setIsNavigating] = useState(false);
+  const [showVoiceGate, setShowVoiceGate] = useState(false);
 
   const handlePromptSubmit = (prompt: any) => {
     if (isNavigating) return;
@@ -1539,6 +1552,11 @@ export default function HomePage() {
     }
   };
 
+  const handleVoiceComplete = (transcript: string) => {
+    setShowVoiceGate(false);
+    handlePromptSubmit(transcript);
+  };
+
   return (
     <PageWrapper>
       <div className="premium-grain-accent w-full">
@@ -1550,12 +1568,19 @@ export default function HomePage() {
           ogImage="https://idealapp.technology/og/home.png"
           structuredData={[organizationSchema, softwareApplicationSchema, websiteSchema]}
         />
+        {showVoiceGate && (
+          <AuraVoiceGate 
+            onClose={() => setShowVoiceGate(false)} 
+            onComplete={handleVoiceComplete} 
+          />
+        )}
         <HeroSection 
           onPromptSubmit={handlePromptSubmit} 
           heroPrompt={heroPrompt}
           onEdit={handleEditDocument}
           onDownload={handleDownloadDocument}
           isNavigating={isNavigating}
+          onActivateVoice={() => setShowVoiceGate(true)}
         />
         
         <SleekHeroMockup />

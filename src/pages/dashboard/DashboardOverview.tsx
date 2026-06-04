@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronRight, ChevronLeft, Sparkles, Mail, Eye, Network } from 'lucide-react';
 import { designSystem } from '../../lib/design-system';
@@ -6,6 +6,7 @@ import { useCompanyDNAStore } from '../../lib/store/useCompanyDNAStore';
 import { useDocumentStore } from '../../lib/store/useDocumentStore';
 import { usePitchPackagesStore } from '../../lib/store/usePitchPackagesStore';
 import { useNavigate } from 'react-router-dom';
+import { InvestorCallSummaryCard } from '../../components/dashboard/InvestorCallSummaryCard';
 
 const MOCK_NUDGES = [
   { id: '1', text: "Your Series A deck hasn't been updated in 12 days.", action: 'Update assets →', type: 'warning', label: 'CRITICAL', icon: Sparkles, iconColor: 'text-purple-500' },
@@ -62,6 +63,19 @@ export const DashboardOverview: React.FC = () => {
               </button>
             </motion.div>
           ))}
+          
+          <div className="flex-shrink-0 w-[420px] snap-start">
+             <InvestorCallSummaryCard 
+               investorName="Hemant Taneja (General Catalyst)"
+               date="Today, 2:30 PM"
+               summary={{
+                  objections: ["Churn rate is too high in SMB segment.", "Requires more clarity on GTM strategy."],
+                  interests: ["Loved the AI onboarding feature.", "Impressed by enterprise pilot pipeline."],
+                  nextSteps: "Send updated financial model reflecting enterprise contracts."
+               }}
+               onApplyInsights={() => {}}
+             />
+          </div>
         </div>
       </section>
 
