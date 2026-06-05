@@ -14,11 +14,11 @@ const FeaturesPage = lazy(() => import('./pages/FeaturesPage'))
 const PerksPage = lazy(() => import('./pages/PerksPage'))
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const EditorPage = lazy(() => import('./pages/EditorPage'))
-import TemplatesPage from './pages/TemplatesPage'
+const TemplatesPage = lazy(() => import('./pages/TemplatesPage'))
 const TemplateDetailPage = lazy(() => import('./pages/TemplateDetailPage'))
 const TutorialsPage = lazy(() => import('./pages/TutorialsPage'))
 const DocumentationPage = lazy(() => import('./pages/DocumentationPage'))
-import { DashboardAnalytics } from './pages/dashboard/DashboardAnalytics';
+const DashboardAnalytics = lazy(() => import('./pages/dashboard/DashboardAnalytics').then(m => ({ default: m.DashboardAnalytics })));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const AuthPage = lazy(() => import('./pages/AuthPage'))
 const CheckoutPage = lazy(() => import('./pages/CheckoutPage'))
@@ -54,7 +54,7 @@ const InvestorsPublicPage = lazy(() => import('./pages/public/InvestorsPublicPag
 // Components
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import AuthModal from './components/auth/AuthModal'
-import ErrorBoundary from './components/ui/ErrorBoundary'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { SuperAdminDashboard } from './components/Dashboard/SuperAdminDashboard'
 
 function ScrollToTop() {

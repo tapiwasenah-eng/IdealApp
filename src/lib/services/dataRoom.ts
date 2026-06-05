@@ -1,5 +1,9 @@
 // Data Room Provisioning & Webhook Logic
 
+import { db } from '../firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { v4 as uuidv4 } from 'uuid';
+
 export interface ProvisionDataRoomResponse {
   dataRoomId: string;
   secureLink: string;
@@ -11,21 +15,21 @@ export interface ProvisionDataRoomResponse {
  * Maps the investor email to a unique hashed token, linking them to a specific document.
  */
 export async function provisionDataRoom(investorEmail: string, documentId: string): Promise<ProvisionDataRoomResponse> {
-  // In a real implementation:
-  // 1. Generate unique token: const token = crypto.randomUUID();
-  // 2. Create sub-collection record in Firestore: 
-  //    await setDoc(doc(db, "documents", documentId, "dataRooms", token), { 
-  //        investorEmail, 
-  //        createdAt: serverTimestamp(),
-  //        status: 'active' 
-  //    });
-  // 3. Construct preview link
+  const token = uuidv4();
   
-  const mockTokenId = Math.random().toString(36).substring(7);
-  const secureLink = `/dataroom/${documentId}?access=${mockTokenId}`;
+  // Create a record in Firestore assigning this token to the investor for this document
+  const dataRoomRef = doc(db, 'documents', documentId, 'dataRooms', token);
+  
+  await setDoc(dataRoomRef, {
+    investorEmail,
+    createdAt: serverTimestamp(),
+    status: 'active',
+  });
+  
+  const secureLink = `${window.location.origin}/dataroom/${documentId}?access=${token}`;
 
   return {
-    dataRoomId: mockTokenId,
+    dataRoomId: token,
     secureLink,
     investorEmail,
   };

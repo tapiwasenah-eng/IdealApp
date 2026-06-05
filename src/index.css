@@ -70,6 +70,7 @@
 
   --animate-fadeIn: fadeIn 0.25s ease-out both;
   --animate-shimmer: shimmer 0.5s linear infinite;
+  --animate-marquee: marquee 30s linear infinite;
 
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(6px); }
@@ -79,6 +80,11 @@
   @keyframes shimmer {
     0%   { background-position: -600px 0; }
     100% { background-position:  600px 0; }
+  }
+
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
   }
 }
 
