@@ -13,6 +13,7 @@ import { auth, db } from '../lib/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { useBillingStore } from '../lib/store/useBillingStore';
 import { useStore } from './index';
+import { track } from '../lib/analytics';
 
 interface UserProfile {
   uid: string;
@@ -50,7 +51,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signIn: async (email, password) => {
     set({ loading: true, error: null });
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const { user } = await signInWithEmailAndPassword(auth, email, password);
+      track("user_logged_in", { user_id: user.uid, method: "email" });
     } catch (error: any) {
       set({ error: error.message });
       throw error;
@@ -79,6 +81,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await setDoc(doc(db, 'users', user.uid), profile);
       useBillingStore.getState().setPlan(profile.plan);
       set({ profile, user, isAuthenticated: true });
+      track("user_signed_up", { user_id: user.uid, method: "email", source: "auth_modal" });
     } catch (error: any) {
       set({ error: error.message });
       throw error;
@@ -111,8 +114,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           createdAt: new Date().toISOString(),
         };
         await setDoc(docRef, profile);
+        track("user_signed_up", { user_id: user.uid, method: "google", source: "auth_modal" });
       } else {
         profile = docSnap.data() as UserProfile;
+        track("user_logged_in", { user_id: user.uid, method: "google" });
       }
       useBillingStore.getState().setPlan(profile.plan);
       set({ profile, user, isAuthenticated: true });
@@ -135,10 +140,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!profile) return;
 
     try {
+      const oldPlan = profile.plan;
       const updatedProfile = { ...profile, plan };
       await setDoc(doc(db, 'users', profile.uid), updatedProfile, { merge: true });
       useBillingStore.getState().setPlan(plan);
       set({ profile: updatedProfile });
+      
+      if (oldPlan !== plan) {
+        if (plan === 'pro' || plan === 'studio') {
+          track("user_upgraded_plan", { user_id: profile.uid, plan_type: plan, previous_plan: oldPlan });
+        } else {
+          track("user_downgraded_plan", { user_id: profile.uid, plan_type: plan, previous_plan: oldPlan });
+        }
+      }
     } catch (error: any) {
       console.error('Error updating subscription:', error);
       throw error;

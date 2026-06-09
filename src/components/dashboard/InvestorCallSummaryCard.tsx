@@ -1,88 +1,57 @@
 import React from 'react';
-import { PhoneCall, FileText, CheckCircle, Clock } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Video, Calendar, Sparkles, ChevronRight, FileText, CheckCircle2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-interface InvestorCallSummaryCardProps {
-  investorName: string;
-  date: string;
-  summary: {
-    objections: string[];
-    interests: string[];
-    nextSteps: string;
-  };
-  onApplyInsights: () => void;
-}
-
-export function InvestorCallSummaryCard({ 
-  investorName, 
-  date, 
-  summary, 
-  onApplyInsights 
-}: InvestorCallSummaryCardProps) {
+export function InvestorCallSummaryCard() {
+  const navigate = useNavigate();
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
-    >
-      <div className="bg-slate-50 border-b border-slate-200 p-5 flex justify-between items-center">
+    <div onClick={() => navigate('/data-room')} className="glass-panel p-6 rounded-2xl border border-trust-blue/20 bg-trust-blue/5 cursor-pointer hover:bg-trust-blue/10 transition-colors">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
-            <PhoneCall size={20} />
+          <div className="w-10 h-10 rounded-full bg-trust-blue/20 flex items-center justify-center text-trust-blue border border-trust-blue/30">
+            <Video className="w-5 h-5" />
           </div>
           <div>
-            <h4 className="font-semibold text-slate-800">Call Summary: {investorName}</h4>
-            <div className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
-              <Clock size={12} />
-              <span>{date}</span>
+            <h4 className="font-semibold text-white">Sequoia Capital Intro</h4>
+            <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5">
+              <Calendar className="w-3 h-3" />
+              <span>Oct 24, 2026</span>
+              <span>•</span>
+              <span>45m duration</span>
             </div>
           </div>
         </div>
-        <div className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold flex items-center gap-1 border border-green-200">
-          <CheckCircle size={14} /> Processed by Aura
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-space-indigo/20 to-electric-violet/20 border border-space-indigo/30 text-xs font-semibold text-white">
+          <Sparkles className="w-3 h-3 text-electric-violet" />
+          AI Summary Ready
         </div>
       </div>
       
-      <div className="p-5 space-y-4">
-        <div>
-          <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Key Interests</h5>
-          <ul className="space-y-1">
-            {summary.interests.map((intel, idx) => (
-              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
-                <span className="text-indigo-500 mt-0.5">•</span> {intel}
-              </li>
-            ))}
+      <div className="space-y-4">
+        <div className="bg-obsidian/40 rounded-xl p-4 border border-white/5">
+          <h5 className="text-xs font-semibold text-white/70 uppercase tracking-widest mb-2">Key Takeaways</h5>
+          <ul className="space-y-2">
+            <li className="flex items-start gap-2 text-sm text-white/90">
+              <CheckCircle2 className="w-4 h-4 text-plasma-green shrink-0 mt-0.5" />
+              <span>Strong interest in the automated data room architecture; requested deeper technical dive.</span>
+            </li>
+            <li className="flex items-start gap-2 text-sm text-white/90">
+              <CheckCircle2 className="w-4 h-4 text-plasma-green shrink-0 mt-0.5" />
+              <span>Partner identified overlap with current portfolio, specifically highlighting go-to-market synergies.</span>
+            </li>
           </ul>
         </div>
         
-        <div>
-          <h5 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2">Objections / Risks</h5>
-          <ul className="space-y-1">
-            {summary.objections.map((intel, idx) => (
-              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
-                <span className="text-red-400 mt-0.5">•</span> {intel}
-              </li>
-            ))}
-          </ul>
-        </div>
-        
-        <div className="pt-2">
-          <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Next Steps</h5>
-          <p className="text-sm text-slate-800 bg-slate-50 p-3 rounded-lg border border-slate-100">
-            {summary.nextSteps}
-          </p>
+        <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center gap-1.5 text-trust-blue font-medium">
+            <FileText className="w-4 h-4" />
+            <span>Transcript & Commitments extracted</span>
+          </div>
+          <button className="text-white hover:text-electric-violet transition-colors flex items-center gap-1 font-medium">
+            View Full Brief <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
       </div>
-
-      <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end">
-        <button 
-          onClick={onApplyInsights}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors shadow-sm"
-        >
-          <FileText size={16} />
-          Apply Insights to Pitch Deck
-        </button>
-      </div>
-    </motion.div>
+    </div>
   );
 }

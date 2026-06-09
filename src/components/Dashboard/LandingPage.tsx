@@ -131,7 +131,7 @@ export const LandingPage: React.FC = () => {
         {/* Results Counter */}
         <div className="flex items-center gap-4 mb-8">
           <p className="text-sm text-slate-500">
-            Showing <span className="font-bold text-slate-700">1-{Math.min(12, templates.length || 54)}</span> of <span className="font-bold text-slate-700">{templates.length || 54}</span> Templates
+            Showing <span className="font-bold text-slate-700">1-{Math.min(12, templates.length || 50)}</span> of <span className="font-bold text-slate-700">{Math.max(templates.length, 50)}+</span> Templates
           </p>
           <div className="h-px bg-slate-200 flex-1"></div>
         </div>

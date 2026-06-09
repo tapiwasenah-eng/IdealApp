@@ -114,8 +114,8 @@ export default function FeaturesPage() {
   return (
     <PageWrapper>
       <SEOHead
-        title="Features — AI Document Generation, Canvas Editor & 54 Templates"
-        description="Explore Ideal App's AI document generation, drag-and-drop canvas editor, 54 professional templates, real-time collaboration, and integrated investor database."
+        title="Features — AI Document Generation, Canvas Editor & 50+ Templates"
+        description="Explore Ideal App's AI document generation, drag-and-drop canvas editor, 50+ professional templates, real-time collaboration, and integrated investor database."
         keywords="AI document generation, drag and drop pitch deck editor, pitch deck templates, business plan software features, AI presentation tool, startup document platform, financial model templates, data room software"
         canonicalUrl="https://idealapp.technology/features"
         ogImage="https://idealapp.technology/og/features.png"

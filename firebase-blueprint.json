@@ -18,20 +18,42 @@
       },
       "required": ["uid", "email", "plan", "createdAt"]
     },
-    "Document": {
-      "title": "Document",
-      "description": "A workspace document with canvas data",
+    "Template": {
+      "title": "Template",
+      "description": "System or user template",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "userId": { "type": "string" },
-        "title": { "type": "string" },
-        "canvasData": { "type": "string" },
-        "status": { "type": "string", "enum": ["In Progress", "Completed", "Review"] },
-        "lastModified": { "type": "string", "format": "date-time" },
-        "type": { "type": "string" }
+        "name": { "type": "string" },
+        "document_type": { "type": "string" },
+        "category": { "type": "string" },
+        "sector_tags": { "type": "array" },
+        "stage_tags": { "type": "array" },
+        "sections": { "type": "array" },
+        "is_premium": { "type": "boolean" },
+        "is_community": { "type": "boolean" },
+        "created_by": { "type": "string" }
       },
-      "required": ["userId", "title", "canvasData", "status"]
+      "required": ["name", "document_type", "category"]
+    },
+    "UserDocument": {
+      "title": "UserDocument",
+      "description": "A founder's document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "document_type": { "type": "string" },
+        "template_id": { "type": "string" },
+        "source": { "type": "string", "enum": ["upload", "template", "blank"] },
+        "sections": { "type": "array" },
+        "status": { "type": "string", "enum": ["draft", "active", "in_review", "complete"] },
+        "stage": { "type": "string" },
+        "sector": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "document_type", "source", "status", "created_at"]
     }
   },
   "firestore": {
@@ -39,9 +61,17 @@
       "schema": "User",
       "description": "User profile documents"
     },
-    "/documents/{docId}": {
-      "schema": "Document",
-      "description": "Workspace documents"
+    "/templates/{templateId}": {
+      "schema": "Template",
+      "description": "Global system templates"
+    },
+    "/users/{userId}/documents/{docId}": {
+      "schema": "UserDocument",
+      "description": "User's documents"
+    },
+    "/users/{userId}/templates/{templateId}": {
+      "schema": "Template",
+      "description": "User's custom templates"
     }
   }
 }

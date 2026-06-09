@@ -4,6 +4,7 @@ import { designSystem } from "../../../lib/design-system";
 import { X, Share, Users, Shield, Link as LinkIcon, Lock } from "lucide-react";
 import { useBillingStore } from '../../../lib/store/useBillingStore';
 import { PlanGuard } from '../billing/PlanGuard';
+import { trackTemplateEvent } from '../../../lib/analytics';
 
 export const DataRoomShareLinkBuilder: React.FC<{
   isOpen: boolean;
@@ -226,8 +227,17 @@ export const DataRoomShareLinkBuilder: React.FC<{
             </button>
             <button
               onClick={() => {
-                if (step < 3) setStep(step + 1);
-                else onClose(); // TODO: Add real handling / save
+                if (step === 2) {
+                  import('../../../lib/analytics').then(({ track }) => {
+                    track('data_room_link_created', { source: 'builder' });
+                    track('shared_link_created', { type: 'data_room', link_id: 'temp', owner_id: 'unknown' });
+                  });
+                  setStep(3);
+                } else if (step < 3) {
+                  setStep(step + 1);
+                } else {
+                  onClose(); // TODO: Add real handling / save
+                }
               }}
               className="px-6 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
             >

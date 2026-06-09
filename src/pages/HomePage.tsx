@@ -1,213 +1,415 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { 
-  Sparkles, Slack, Briefcase, Calendar, Mail, FileText, 
-  ArrowRight, Command, Zap, Layers, Cpu, Shield, 
-  Database, Activity, Rocket, Key
+// src/pages/HomePage.tsx
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Plus,
+  FileText,
+  FolderLock,
+  Users,
+  Network,
+  Sparkles,
+  BarChart3,
+  Compass,
+  Mic,
+  LogIn,
+  Sun,
+  Moon,
+  ArrowUpRight,
+  ChevronDown,
 } from 'lucide-react';
-import { AuraVoiceGate } from '../components/home/AuraVoiceGate';
+import { useAppStore } from '../store/appStore';
 
-export default function HomePage() {
+// TODO: swap to your final SVG if different
+const STAR_LOGO =
+  'https://res.cloudinary.com/ddchlkkbl/image/upload/q_auto/f_auto/v1780989869/IdealApp_New_Logo_f6ozqa.svg';
+
+// Rotating prompt variants for the typewriter line
+const PROMPTS = [
+  'Create a Fintech Pitch Deck',
+  'Draft an investor update memo',
+  'Summarize my latest board meeting',
+  'Prepare a Series A data room overview',
+];
+
+const INTEGRATION_ICONS = [
+  // For now just use Lucide icons or your own SVGs in-place of GitHub, Slack, etc.
+  // You can replace these with real brand icons.
+  FileText,
+  FolderLock,
+  Users,
+  Network,
+  BarChart3,
+];
+
+const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const [showVoiceGate, setShowVoiceGate] = useState(false);
+  const user = useAppStore((s) => s.user);
+  const [isDarkMode, setIsDarkMode] = useState(true);
 
-  return (
-    <div className="bg-slate-950 min-h-screen text-slate-100 font-sans selection:bg-indigo-500 selection:text-white pb-0 overflow-x-hidden">
-      {/* Background Orbs */}
-      <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/20 rounded-full blur-[120px] pointer-events-none"></div>
+  // Typewriter / rotating prompt state
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [displayText, setDisplayText] = useState('');
+  const [phase, setPhase] = useState<'typing' | 'pausing' | 'deleting'>('typing');
+  const [isHoveringPrompt, setIsHoveringPrompt] = useState(false);
 
-      <Navbar />
+  const activePrompt = PROMPTS[activeIndex];
 
-      <main className="max-w-[1240px] mx-auto px-6 pt-32 pb-40 space-y-32">
-        <HeroSection onActivateVoice={() => setShowVoiceGate(true)} />
-        <IntegrationTicker />
-        <WorkflowSteps />
-      </main>
+  // Basic typewriter effect that cycles through PROMPTS
+  useEffect(() => {
+    if (isHoveringPrompt) return; // freeze on hover
 
-      {showVoiceGate && (
-        <AuraVoiceGate 
-          onClose={() => setShowVoiceGate(false)} 
-          onComplete={(transcript) => {
-            setShowVoiceGate(false);
-            navigate('/generate', { state: { prefill: { full: transcript } } });
-          }} 
-        />
-      )}
+    const current = activePrompt;
 
-      <Footer />
-    </div>
-  );
-}
-
-function Navbar() {
-  return (
-    <nav className="fixed top-0 left-0 right-0 z-[100] bg-slate-950/80 backdrop-blur-xl border-b border-white/10 shadow-sm transition-all duration-300">
-      <div className="max-w-[1240px] mx-auto px-6 h-20 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-600/30">
-            <Command size={20} className="text-white" />
-          </div>
-          <span className="text-xl font-bold tracking-tight text-white">Ragnarok AI</span>
-        </Link>
-        <div className="hidden md:flex items-center gap-8">
-          <a href="#" className="font-semibold text-sm text-slate-300 hover:text-white transition-colors">About</a>
-          <a href="#" className="font-semibold text-sm text-slate-300 hover:text-white transition-colors">Pricing</a>
-          <a href="#" className="font-semibold text-sm text-slate-300 hover:text-white transition-colors">Blog</a>
-        </div>
-        <div>
-          <a href="#" className="px-6 py-2.5 rounded-full border border-white/10 bg-white/5 font-semibold text-sm hover:bg-white/10 text-white transition-colors shadow-sm">
-             Contact
-          </a>
-        </div>
-      </div>
-    </nav>
-  );
-}
-
-function HeroSection({ onActivateVoice }: { onActivateVoice: () => void }) {
-  return (
-    <section className="relative flex flex-col items-center justify-center text-center mt-12 md:mt-24">
-      <div className="inline-flex items-center gap-3 bg-white/5 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 mb-8 shadow-2xl">
-        <span className="flex h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></span>
-        <span className="text-sm font-semibold tracking-wide text-indigo-200">Latest Release: Agent Core v3.1</span>
-      </div>
-      
-      <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white leading-tight mb-8 max-w-4xl">
-        Build AI Agents That Run <br/>
-        <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
-          Fully on Autopilot
-        </span>
-      </h1>
-      
-      <p className="text-lg md:text-xl text-slate-400 leading-relaxed max-w-2xl mb-12">
-        A reliable agent infrastructure that handles research, analysis, communication, and task execution with zero supervision. Experience real AI ownership.
-      </p>
-
-      <div className="flex flex-col sm:flex-row items-center gap-6 w-full sm:w-auto">
-        <a href="#" className="flex items-center justify-center gap-3 bg-white text-slate-900 px-8 py-4 rounded-xl font-bold shadow-lg shadow-white/10 hover:bg-slate-100 transition-all w-full sm:w-auto">
-          Get Started
-          <ArrowRight size={18} />
-        </a>
-        
-        <button 
-          onClick={onActivateVoice}
-          className="group relative flex items-center justify-center gap-3 bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 px-8 py-4 rounded-xl font-bold hover:bg-indigo-600/30 hover:text-indigo-100 transition-all shadow-[0_0_20px_rgba(79,70,229,0.15)] w-full sm:w-auto overflow-hidden outline-none"
-        >
-          <div className="absolute inset-0 bg-gradient-to-r from-indigo-600/0 via-indigo-600/10 to-indigo-600/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
-          <Sparkles size={20} className="animate-pulse text-indigo-400 group-hover:text-indigo-300" />
-          <span>Try Voice AI</span>
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function IntegrationTicker() {
-  const integrations = [
-    { name: 'Slack', icon: Slack },
-    { name: 'Briefcase', icon: Briefcase },
-    { name: 'Calendar', icon: Calendar },
-    { name: 'Mail', icon: Mail },
-    { name: 'FileText', icon: FileText },
-  ];
-
-  return (
-    <section className="w-full pt-12 relative z-10">
-      <h3 className="text-center font-medium text-slate-500 mb-10 text-sm uppercase tracking-widest">
-        Trusted & Deployed by 300+ Technical Teams Worldwide
-      </h3>
-      
-      <div className="relative w-full overflow-hidden">
-        {/* Gradients to fade out the edges */}
-        <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-slate-950 to-transparent z-10 pointer-events-none"></div>
-        <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-slate-950 to-transparent z-10 pointer-events-none"></div>
-        
-        <div className="flex whitespace-nowrap animate-marquee gap-6 w-max opacity-80">
-          {[...integrations, ...integrations, ...integrations, ...integrations].map((item, i) => {
-            const Icon = item.icon;
-            return (
-              <div key={i} className="flex items-center gap-3 bg-white/5 border border-white/10 backdrop-blur-md rounded-full px-6 py-3 cursor-default hover:bg-white/10 hover:border-white/20 transition-colors">
-                <Icon size={20} className="text-slate-300" strokeWidth={2} />
-                <span className="font-semibold text-slate-200 tracking-wide">{item.name}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function WorkflowSteps() {
-  const steps = [
-    {
-      title: "Smart Task Execution",
-      desc: "Agents break tasks into clear steps, validate reasoning, and execute with predictable accuracy. Fast and reliable.",
-      icon: Zap
-    },
-    {
-      title: "Flexible Integrations",
-      desc: "Connect your existing stack. Internal APIs, CRMs, and workspaces synced instantly via seamless data layers.",
-      icon: Layers
-    },
-    {
-      title: "Instant Workflow Generation",
-      desc: "Describe what you want done. The agent plans, drafts, and delivers production-ready outcomes automatically.",
-      icon: Cpu
+    if (phase === 'typing') {
+      if (displayText.length < current.length) {
+        const id = setTimeout(() => {
+          setDisplayText(current.slice(0, displayText.length + 1));
+        }, 45);
+        return () => clearTimeout(id);
+      }
+      const id = setTimeout(() => setPhase('pausing'), 1200);
+      return () => clearTimeout(id);
     }
-  ];
+
+    if (phase === 'pausing') {
+      const id = setTimeout(() => setPhase('deleting'), 600);
+      return () => clearTimeout(id);
+    }
+
+    if (phase === 'deleting') {
+      if (displayText.length > 0) {
+        const id = setTimeout(
+          () => setDisplayText((t) => t.slice(0, t.length - 1)),
+          30
+        );
+        return () => clearTimeout(id);
+      }
+      const id = setTimeout(() => {
+        setActiveIndex((i) => (i + 1) % PROMPTS.length);
+        setPhase('typing');
+      }, 200);
+      return () => clearTimeout(id);
+    }
+  }, [phase, displayText, activePrompt, isHoveringPrompt]);
+
+  const handlePromptClick = (prompt: string) => {
+    useAppStore.getState().setInitialPrompt(prompt);
+    navigate('/wizard');
+  };
+
+  const handleSubmit = () => {
+    const prompt = displayText || activePrompt;
+    handlePromptClick(prompt);
+  };
+
+  const handleCreateNew = () => {
+    if (!user) {
+      navigate('/auth?mode=signup');
+      return;
+    }
+    navigate('/dashboard/documents');
+  };
+
+  const handleGoPro = () => {
+    navigate('/pricing');
+  };
+
+  const handleVoiceAI = () => {
+    useAppStore.getState().setAuraVoiceOpen(true);
+  };
+
+  const handleLogin = () => {
+    if (user) {
+      navigate('/dashboard/documents');
+    } else {
+      navigate('/auth?mode=signin');
+    }
+  };
+
+  const toggleTheme = () => {
+    setIsDarkMode((v) => !v);
+  };
 
   return (
-    <section>
-      <div className="text-center mb-16">
-        <h2 className="text-3xl md:text-5xl font-medium tracking-tight text-white mb-6">
-          Architected for Scale
-        </h2>
-        <p className="text-lg text-slate-400 max-w-2xl mx-auto">
-          From abstract reasoning to deterministic output, our infrastructure powers agents that never miss a step.
-        </p>
-      </div>
+    <div className="min-h-screen bg-ideal-charcoal text-ideal-text flex">
+      {/* LEFT SIDEBAR */}
+      <aside className="hidden md:flex inset-y-0 left-0 z-40 w-72 flex-col bg-ideal-sidebar text-white shadow-sidebar-elevated overflow-hidden">
+        {/* Brand header */}
+        <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-white/5 cursor-pointer" onClick={() => navigate('/')}>
+          <div className="h-9 w-9 flex items-center justify-center rounded-2xl bg-black/40 ring-2 ring-white/10 overflow-hidden">
+            <img src={STAR_LOGO} alt="IdealApp logo" className="h-5 w-5" />
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span className="text-[10px] font-semibold tracking-[0.25em] text-ideal-muted uppercase">
+              THE IDEAL APP
+            </span>
+            <span className="text-sm font-semibold text-white">
+              Founder Control Center
+            </span>
+          </div>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {steps.map((s, i) => (
-          <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl p-8 hover:border-indigo-500/50 hover:bg-slate-900/80 transition-all duration-300 shadow-2xl relative overflow-hidden group">
-            {/* Ambient hover glow */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-[50px] opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            
-            <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-indigo-400 mb-6 group-hover:scale-110 transition-transform duration-300">
-              <s.icon size={24} />
+        <div className="flex-1 overflow-y-auto pt-4 space-y-6 scrollbar-hide">
+          {/* MY PROJECTS */}
+          <section className="px-5">
+            <p className="text-[11px] font-semibold tracking-[0.22em] text-ideal-muted uppercase mb-3 text-left">
+              MY PROJECTS
+            </p>
+            <button
+              type="button"
+              onClick={handleCreateNew}
+              className="w-full flex items-center justify-center gap-2 rounded-full bg-black/40 border border-white/15 text-sm font-semibold text-white py-2.5 hover:bg-white/10 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              <span>CREATE NEW</span>
+            </button>
+          </section>
+
+          {/* CORE TOOLS */}
+          <section className="px-5">
+            <p className="text-[11px] font-semibold tracking-[0.22em] text-ideal-muted uppercase mb-2.5 text-left">
+              CORE TOOLS
+            </p>
+            <nav className="space-y-1 text-sm">
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/documents')}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/5 text-slate-200"
+              >
+                <FileText className="h-4 w-4 text-slate-300" />
+                <span>Pitch Decks</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/data-room')}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/5 text-slate-200"
+              >
+                <FolderLock className="h-4 w-4 text-slate-300" />
+                <span>Data Rooms</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/investors')}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/5 text-slate-200"
+              >
+                <Users className="h-4 w-4 text-slate-300" />
+                <span>Investor Matching</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/outreach')}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/5 text-slate-200"
+              >
+                <Network className="h-4 w-4 text-slate-300" />
+                <span>Outreach Pipeline</span>
+              </button>
+            </nav>
+          </section>
+
+          {/* RESOURCES */}
+          <section className="px-5 pb-4">
+            <p className="text-[11px] font-semibold tracking-[0.22em] text-ideal-muted uppercase mb-2.5 text-left">
+              RESOURCES
+            </p>
+            <nav className="space-y-1 text-sm">
+              <button
+                type="button"
+                onClick={() => navigate('/templates')}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/5 text-slate-200"
+              >
+                <Sparkles className="h-4 w-4 text-slate-300" />
+                <span>Templates</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/analytics')}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/5 text-slate-200"
+              >
+                <BarChart3 className="h-4 w-4 text-slate-300" />
+                <span>Analytics</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/community')}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/5 text-slate-200"
+              >
+                <Compass className="h-4 w-4 text-slate-300" />
+                <span>Community</span>
+              </button>
+            </nav>
+          </section>
+        </div>
+
+        {/* FOOTER: GO PRO, VOICE AI, LOGIN + THEME TOGGLE */}
+        <div className="mt-auto px-4 pt-3 pb-4 space-y-3 border-t border-white/5 flex-shrink-0">
+          {/* GO PRO */}
+          <button
+            type="button"
+            onClick={handleGoPro}
+            className="w-full flex items-center justify-between rounded-2xl bg-ideal-neon text-black px-3 py-2 shadow-[0_12px_40px_rgba(205,231,27,0.65)] hover:bg-lime-300 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-xl bg-black text-ideal-neon text-xs font-bold leading-none">
+                ◆
+              </span>
+              <div className="flex flex-col leading-tight text-left">
+                <span className="text-xs font-semibold">GO PRO</span>
+                <span className="text-[10px] font-medium opacity-95">
+                  Unlock Global VC Data
+                </span>
+              </div>
             </div>
-            
-            <h3 className="text-xl font-bold text-slate-100 mb-4">{s.title}</h3>
-            <p className="text-slate-400 leading-relaxed">
-              {s.desc}
+            <span className="rounded-full bg-ideal-neon text-black text-[10px] font-extrabold tracking-[0.18em] px-2 py-0.5 border border-black/10">
+              30% OFF
+            </span>
+          </button>
+
+          {/* TRY VOICE AI */}
+          <button
+            type="button"
+            onClick={handleVoiceAI}
+            className="w-full flex items-center justify-between rounded-2xl bg-white/5 text-ideal-text px-3 py-2 text-[11px] font-semibold hover:bg-white/10"
+          >
+            <span className="flex items-center gap-2">
+              <Mic className="h-4 w-4 text-ideal-neon" />
+              <span>TRY VOICE AI</span>
+            </span>
+            <span className="uppercase text-[9px] text-ideal-muted tracking-[0.18em]">
+              BETA
+            </span>
+          </button>
+
+          {/* LOG IN + THEME TOGGLE */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleLogin}
+              className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-white/5 px-3 py-2 text-[11px] font-semibold tracking-[0.16em] uppercase text-ideal-text hover:bg-white/10"
+            >
+              <LogIn className="h-4 w-4" />
+              <span>{user ? 'DASHBOARD' : 'LOG IN'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="h-9 w-9 flex items-center justify-center rounded-2xl bg-black/40 border border-white/10 text-ideal-muted hover:text-white hover:border-ideal-neon/60"
+            >
+              {isDarkMode ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* MAIN HERO AREA */}
+      <main className="flex-1 overflow-y-auto w-full flex flex-col items-center justify-center px-6 py-10 border-l border-white/5">
+        <section className="relative w-full max-w-6xl rounded-hero-xl bg-ideal-hero shadow-hero-card pt-16 pb-20 px-8 md:px-16" style={{ minHeight: '600px' }}>
+          {/* North Star */}
+          <div className="absolute top-8 left-1/2 -translate-x-1/2">
+            <img
+              src={STAR_LOGO}
+              alt="IdealApp north star"
+              className="h-10 w-10 opacity-95"
+            />
+          </div>
+
+          {/* Headline */}
+          <div className="mt-14 text-center">
+            <p className="font-serif text-ideal-text">
+              <span className="text-base align-middle mr-1 text-ideal-text">
+                The
+              </span>
+              <span className="text-4xl md:text-5xl font-semibold text-ideal-gold">
+                Ideal App <span className="font-serif text-3xl md:text-4xl text-ideal-text ml-1 tracking-tight">for Founders by Investors</span>
+              </span>
+            </p>
+            <p className="mt-4 text-sm md:text-base text-ideal-muted">
+              Your north star to a polished document in minutes.
             </p>
           </div>
-        ))}
-      </div>
-    </section>
-  );
-}
 
-function Footer() {
-  return (
-    <footer className="bg-slate-950 py-16 border-t border-white/10 mt-24 relative z-10">
-       <div className="max-w-[1240px] mx-auto px-6">
-         <div className="flex flex-col md:flex-row items-center justify-between text-sm text-slate-500 font-medium">
-            <div className="flex items-center gap-3 mb-4 md:mb-0">
-               <div className="w-6 h-6 bg-indigo-600 rounded flex items-center justify-center">
-                 <Command size={14} className="text-white" />
-               </div>
-               <span className="text-slate-300">&copy; 2026 Ragnarok AI. All rights reserved.</span>
+          {/* Chat Card */}
+          <div className="mt-14 flex justify-center relative z-10">
+            <div className="w-full max-w-4xl bg-black/85 rounded-[26px] border border-black/70 shadow-hero-card">
+              {/* Prompt row */}
+              <div
+                className="px-7 pt-6 pb-4 flex items-center justify-between gap-4 cursor-text"
+                onMouseEnter={() => setIsHoveringPrompt(true)}
+                onMouseLeave={() => setIsHoveringPrompt(false)}
+                onClick={() =>
+                  handlePromptClick(displayText || activePrompt)
+                }
+              >
+                <p className="text-sm md:text-base text-ideal-text font-medium select-none">
+                  {displayText || activePrompt}
+                  <span className="border-r-[1.5px] border-ideal-gold ml-1 animate-pulse" />
+                </p>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSubmit();
+                  }}
+                  className="h-10 w-10 shrink-0 rounded-full bg-ideal-neon text-black flex items-center justify-center hover:bg-lime-300 transition-colors"
+                >
+                  <ArrowUpRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Bottom rail */}
+              <div className="px-7 pb-5 flex items-center justify-between text-xs text-ideal-muted">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-ideal-text"
+                >
+                  <span className="h-6 w-6 rounded-full bg-black/70 flex items-center justify-center border border-white/10 hover:bg-white/10 transition-colors">
+                    <Plus className="h-4 w-4" />
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-[11px] font-semibold tracking-[0.12em] uppercase hover:text-white transition-colors"
+                >
+                  <span className="inline-flex h-4 w-4 rounded-full bg-gradient-to-tr from-sky-400 to-indigo-400 mr-1" />
+                  <span className="text-ideal-text select-none">
+                    IDEAL picks best model
+                  </span>
+                  <ChevronDown className="h-3 w-3" />
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-6">
-               <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
-               <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
-               <a href="#" className="hover:text-white transition-colors">Contact</a>
+          </div>
+
+          {/* Voice AI CTA */}
+          <div className="mt-6 flex justify-center relative z-10">
+            <button
+              type="button"
+              onClick={handleVoiceAI}
+              className="inline-flex items-center gap-2 text-xs md:text-sm font-bold text-obsidian hover:opacity-80 transition-opacity"
+            >
+              <Mic className="h-4 w-4" />
+              <span>Try Voice AI instead</span>
+            </button>
+          </div>
+
+          {/* Scrolling integration logos */}
+          <div className="absolute bottom-10 left-0 w-full overflow-hidden">
+            <div className="flex gap-16 px-10 animate-[scrollLogos_40s_linear_infinite]">
+              {[...INTEGRATION_ICONS, ...INTEGRATION_ICONS, ...INTEGRATION_ICONS, ...INTEGRATION_ICONS, ...INTEGRATION_ICONS, ...INTEGRATION_ICONS].map((Icon, idx) => (
+                <Icon
+                  key={idx}
+                  className="h-7 w-7 opacity-[0.15] text-obsidian flex-shrink-0"
+                />
+              ))}
             </div>
-         </div>
-       </div>
-    </footer>
+          </div>
+        </section>
+      </main>
+    </div>
   );
-}
+};
+
+export default HomePage;

@@ -16,7 +16,7 @@ import {
   Upload
 } from 'lucide-react';
 import { TopHeader } from './TopHeader';
-import { collection, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, collectionGroup, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '@/src/lib/firebase';
 import { cn, formatDate } from '@/src/lib/utils';
 import { toast } from 'react-hot-toast';
@@ -30,16 +30,33 @@ export const SuperAdminDashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // We need to verify admin role to prevent missing permission errors
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const usersUnsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
-      setUsers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    // If not admin, the snapshot will fail with permissions error. 
+    // Usually a higher level route guard stops this, but we'll add a try/catch or just catch errors via listener.
+    const usersUnsubscribe = onSnapshot(collection(db, 'users'), 
+      (snapshot) => setUsers(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => {
+        console.error(err);
+        setError("Not authorized or permission denied.");
+        setLoading(false);
+      }
+    );
 
-    const docsUnsubscribe = onSnapshot(query(collection(db, 'documents'), orderBy('updatedAt', 'desc')), (snapshot) => {
-      setAllDocs(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
+    const docsUnsubscribe = onSnapshot(query(collectionGroup(db, 'documents'), orderBy('updated_at', 'desc')), 
+      (snapshot) => {
+        setAllDocs(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      },
+      (err) => {
+        console.error(err);
+        setError("Not authorized or permission denied.");
+        setLoading(false);
+      }
+    );
 
     return () => {
       usersUnsubscribe();
@@ -47,10 +64,10 @@ export const SuperAdminDashboard: React.FC = () => {
     };
   }, []);
 
-  const handleDeleteDoc = async (docId: string) => {
+  const handleDeleteDoc = async (userId: string, docId: string) => {
     if (!window.confirm('Are you sure you want to delete this document?')) return;
     try {
-      await deleteDoc(doc(db, 'documents', docId));
+      await deleteDoc(doc(db, 'users', userId, 'documents', docId));
       toast.success('Document deleted');
     } catch (error) {
       toast.error('Failed to delete document');
@@ -301,7 +318,7 @@ export const SuperAdminDashboard: React.FC = () => {
                       </td>
                       <td className="px-8 py-5 text-right">
                         <button 
-                          onClick={() => handleDeleteDoc(doc.id)}
+                          onClick={() => handleDeleteDoc(doc.userId || doc.ownerId, doc.id)}
                           className="p-3 text-text-secondary hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
                         >
                           <Trash2 size={20} />

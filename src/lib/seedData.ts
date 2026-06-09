@@ -6,11 +6,68 @@ import {
   limit,
   writeBatch,
   doc,
+  setDoc,
   serverTimestamp,
+  Timestamp,
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { INVESTORS } from '../data/investors'
 import { TEMPLATES as SEED_TEMPLATES } from '../data/templates'
+import { PitchTemplate, TemplateSector } from './firestoreTypes'
+
+const templatesCol = collection(db, "templates");
+
+export async function seedTemplatesIfEmpty() {
+  const snap = await getDocs(templatesCol);
+  if (!snap.empty) return;
+
+  const now = Timestamp.now();
+
+  const baseTemplates: Omit<PitchTemplate, "created_at" | "updated_at">[] = [
+    {
+      id: "saas-b2b-seed",
+      name: "B2B SaaS Seed",
+      sector: "saas",
+      stage: "seed",
+      complexity: "standard",
+      body_markdown:
+        "# Problem\n\nDescribe the workflow pain your customers feel today...\n\n# Solution\n\nExplain your product and how it automates or augments...\n\n# Traction\n\nShare proof points, pilots, or revenue...\n",
+    },
+    {
+      id: "deeptech-spinout-seed",
+      name: "DeepTech Spin-Out · Seed",
+      sector: "deeptech",
+      stage: "seed",
+      complexity: "advanced",
+      body_markdown:
+        "# Origin\n\nHighlight the research, lab, or IP foundation...\n\n# Breakthrough\n\nDescribe what makes this non-obvious or defensible...\n",
+    },
+    {
+      id: "fintech-b2b-payments",
+      name: "Fintech B2B Payments Deck",
+      sector: "fintech",
+      stage: "series_a",
+      complexity: "standard",
+      body_markdown:
+        "# Market\n\nExplain how money moves today and what is broken...\n",
+    },
+  ];
+
+  await Promise.all(
+    baseTemplates.map((tpl) =>
+      setDoc(doc(templatesCol, tpl.id), {
+        ...tpl,
+        created_at: now,
+        updated_at: now,
+      })
+    )
+  );
+}
+
+export async function fetchTemplates() {
+  const snap = await getDocs(templatesCol);
+  return snap.docs.map((d) => d.data() as PitchTemplate);
+}
 
 let seeded = false
 

@@ -43,7 +43,7 @@ export const softwareApplicationSchema = {
   "description": "All-in-one AI platform for creating pitch decks, business plans, financial models, investor databases, data rooms, and legal documents.",
   "featureList": [
     "AI-powered document generation",
-    "54 professional templates",
+    "50+ professional templates",
     "Drag-and-drop canvas editor",
     "Investor database",
     "Data room management",
@@ -127,7 +127,7 @@ export const faqPricingSchema = {
       "name": "What does the Pro plan include?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "The Pro plan at $12/month gives you unlimited document creation, access to all 54 templates, advanced AI generation, drag-and-drop canvas editor, PDF and PowerPoint exports, and priority email support."
+        "text": "The Pro plan at $12/month gives you unlimited document creation, access to all 50+ templates, advanced AI generation, drag-and-drop canvas editor, PDF and PowerPoint exports, and priority email support."
       }
     },
     {
@@ -167,7 +167,7 @@ export const faqPricingSchema = {
       "name": "How many templates does Ideal App offer?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Ideal App offers 54 professionally designed templates covering pitch decks, business plans, financial models, one-pagers, investor memos, data room structures, and legal documents — all editable with the AI canvas editor."
+        "text": "Ideal App offers 50+ professionally designed templates covering pitch decks, business plans, financial models, one-pagers, investor memos, data room structures, and legal documents — all editable with the AI canvas editor."
       }
     },
     {
@@ -273,7 +273,7 @@ export const howToSchema = {
       "@type": "HowToStep",
       "position": 2,
       "name": "Choose a pitch deck template",
-      "text": "Browse 54 templates and select a pitch deck layout that suits your industry and stage.",
+      "text": "Browse 50+ templates and select a pitch deck layout that suits your industry and stage.",
       "url": "https://idealapp.technology/templates"
     },
     {

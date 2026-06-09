@@ -66,7 +66,34 @@ async function startServer() {
   app.use('/api/data-room-links', dataRoomRouter);
   app.use('/api/export', (await import('./server/routes/export.ts')).default);
   app.use('/api/outreach', (await import('./server/routes/outreach.ts')).default);
-  app.use('/api/slack', (await import('./server/routes/slack.ts')).default);
+
+  app.get('/api/voice/token', async (req, res, next) => {
+    try {
+      if (!process.env.ASSEMBLYAI_API_KEY) {
+        return res.status(503).json({ error: 'AssemblyAI API key not configured' });
+      }
+
+      const response = await fetch(
+        "https://streaming.assemblyai.com/v3/token?expires_in_seconds=600",
+        {
+          headers: {
+            authorization: process.env.ASSEMBLYAI_API_KEY
+          }
+        }
+      );
+
+      if (!response.ok) {
+        console.error("AssemblyAI token error", await response.text());
+        return res.status(500).json({ error: "Failed to fetch AssemblyAI token" });
+      }
+
+      const json = await response.json();
+      res.json(json);
+    } catch (err) {
+      console.error("AssemblyAI token fetch failed", err);
+      res.status(500).json({ error: "AssemblyAI token fetch failed" });
+    }
+  });
 
   // PayPal Configuration
   const getPayPalConfig = () => {

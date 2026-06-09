@@ -67,48 +67,4 @@ export const FeaturesPage: React.FC = () => (
   </PageTemplate>
 );
 
-export const PerksPage: React.FC = () => (
-  <PageTemplate 
-    title="Founder Perks" 
-    subtitle="Exclusive benefits and resources for the Ideal App community."
-  >
-    <div className="grid md:grid-cols-3 gap-8">
-      {[
-        { title: '50% Lifetime Discount', desc: 'Early supporters get 50% off all plans forever.' },
-        { title: 'Priority Support', desc: 'Direct access to our founding team for any assistance.' },
-        { title: 'Early Access', desc: 'Be the first to try new AI models and design features.' }
-      ].map((p, i) => (
-        <div key={i} className="card p-10 space-y-4 text-center">
-          <h3 className="text-2xl font-bold text-text-primary">{p.title}</h3>
-          <p className="text-text-secondary font-light">{p.desc}</p>
-        </div>
-      ))}
-    </div>
-  </PageTemplate>
-);
 
-export const PricingPage: React.FC = () => (
-  <PageTemplate 
-    title="Simple Pricing" 
-    subtitle="Choose the plan that's right for your business growth."
-  >
-    <div className="grid md:grid-cols-3 gap-8">
-      {[
-        { name: 'Starter', price: '$0', desc: 'For individual founders exploring ideas.' },
-        { name: 'Pro', price: '$39', desc: 'For growing startups needing full access.' },
-        { name: 'Enterprise', price: 'Custom', desc: 'For large teams and organizations.' }
-      ].map((p, i) => (
-        <div key={i} className={cn("card p-10 space-y-8 text-center", i === 1 && "border-primary ring-4 ring-primary/10")}>
-          <div className="space-y-2">
-            <h3 className="text-xl font-bold text-text-primary">{p.name}</h3>
-            <p className="text-4xl font-display font-bold text-text-primary">{p.price}</p>
-            <p className="text-sm text-text-secondary font-light">{p.desc}</p>
-          </div>
-          <Link to="/register" className={cn("w-full block py-4 rounded-2xl font-bold transition-all", i === 1 ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-surface text-text-primary hover:bg-border")}>
-            Get Started
-          </Link>
-        </div>
-      ))}
-    </div>
-  </PageTemplate>
-);

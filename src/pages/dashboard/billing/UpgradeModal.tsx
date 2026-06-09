@@ -21,6 +21,9 @@ export const UpgradeModal: React.FC = () => {
     : 'Upgrade to vault Pro to superpower your fundraise.';
 
   const handleUpgrade = () => {
+    import('../../../lib/analytics').then(({ track }) => {
+      track('upgrade_clicked', { plan_type: 'pro', feature_gated: upgradeModalFeature || 'general' });
+    });
     setPlan('pro');
     closeUpgradeModal();
     // TODO: Navigate to real checkout session

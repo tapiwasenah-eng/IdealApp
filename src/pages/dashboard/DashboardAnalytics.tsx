@@ -235,23 +235,23 @@ export const DashboardAnalytics: React.FC = () => {
   ];
 
   return (
-    <div className="w-full pb-12 max-w-7xl mx-auto px-6 mt-8">
+    <div className="w-full h-full pb-12 max-w-7xl mx-auto px-6 mt-8 overflow-y-auto">
       <div className="mb-8">
-        <h2 style={{ fontFamily: typography.fonts.interface, fontWeight: 700, fontSize: typography.scale.h2.fontSize, color: colors.primary.obsidian }}>
+        <h2 className="text-2xl font-semibold text-slate-100">
           Analytics Overview
         </h2>
-        <p className="text-slate-500 mt-2">Track investor engagement across your documents and data rooms.</p>
+        <p className="text-slate-400 mt-2">Track investor engagement across your documents and data rooms.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {cards.map((card, idx) => (
-          <div key={idx} className="bg-white rounded-2xl p-6 border border-slate-100 flex items-center gap-4" style={{ boxShadow: shadows.e1 }}>
-            <div className={`p-4 rounded-xl flex-shrink-0 ${card.bg}`}>
-              <card.icon className={`w-6 h-6 ${card.color}`} />
+          <div key={idx} className="bg-[#151A26] rounded-2xl p-6 border border-white/5 flex items-center gap-4 hover:border-white/20 transition-colors">
+            <div className={`p-4 rounded-xl flex-shrink-0 bg-white/5`}>
+              <card.icon className={`w-6 h-6 text-white`} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-slate-500 truncate">{card.label}</div>
-              <div className="text-2xl font-bold text-slate-800 truncate" title={card.value}>{card.value}</div>
+              <div className="text-sm font-medium text-slate-400 truncate">{card.label}</div>
+              <div className="text-2xl font-bold text-slate-100 truncate" title={card.value}>{card.value}</div>
             </div>
           </div>
         ))}
@@ -259,23 +259,23 @@ export const DashboardAnalytics: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Data Room Engagement */}
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" style={{ boxShadow: shadows.e1 }}>
-           <div className="p-6 border-b border-slate-100">
-             <h3 className="text-lg font-bold text-slate-800">Data Room Engagement</h3>
+        <div className="bg-[#151A26] rounded-2xl border border-white/5 overflow-hidden">
+           <div className="p-6 border-b border-white/5">
+             <h3 className="text-lg font-semibold text-slate-100">Data Room Engagement</h3>
            </div>
            
            {investorEngagement.length === 0 ? (
              <div className="text-center py-12">
-               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 text-slate-400 mb-4">
+               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/5 text-slate-400 mb-4">
                  <TrendingUp className="w-8 h-8" />
                </div>
-               <h4 className="text-slate-800 font-semibold mb-1">No views yet</h4>
+               <h4 className="text-slate-200 font-semibold mb-1">No views yet</h4>
                <p className="text-slate-500 text-sm">Share your data room links to start tracking engagement.</p>
              </div>
            ) : (
              <div className="overflow-x-auto">
-               <table className="w-full text-left text-sm text-slate-600">
-                  <thead className="bg-slate-50/50 text-slate-500 font-medium border-b border-slate-100">
+               <table className="w-full text-left text-sm text-slate-300">
+                  <thead className="bg-[#0F141E] text-slate-500 font-medium border-b border-white/5">
                      <tr>
                         <th className="px-6 py-4">Investor</th>
                         <th className="px-6 py-4">Total Views</th>
@@ -283,13 +283,13 @@ export const DashboardAnalytics: React.FC = () => {
                         <th className="px-6 py-4">Top Doc</th>
                      </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-white/5">
                      {investorEngagement.map((inv) => (
-                        <tr key={inv.id} className="hover:bg-slate-50/50 transition-colors">
-                           <td className="px-6 py-4 font-medium text-slate-800">{inv.name}</td>
+                        <tr key={inv.id} className="hover:bg-white/5 transition-colors">
+                           <td className="px-6 py-4 justify-center font-medium text-slate-200">{inv.name}</td>
                            <td className="px-6 py-4">{inv.views}</td>
                            <td className="px-6 py-4">{inv.timeSpent}</td>
-                           <td className="px-6 py-4 text-slate-500 truncate max-w-[150px]" title={inv.topDocTitle || ''}>
+                           <td className="px-6 py-4 text-slate-400 truncate max-w-[150px]" title={inv.topDocTitle || ''}>
                              {inv.topDocTitle}
                            </td>
                         </tr>
@@ -301,37 +301,37 @@ export const DashboardAnalytics: React.FC = () => {
         </div>
 
         {/* Document Performance */}
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" style={{ boxShadow: shadows.e1 }}>
-           <div className="p-6 border-b border-slate-100">
-             <h3 className="text-lg font-bold text-slate-800">Document Performance</h3>
+        <div className="bg-[#151A26] rounded-2xl border border-white/5 overflow-hidden">
+           <div className="p-6 border-b border-white/5">
+             <h3 className="text-lg font-semibold text-slate-100">Document Performance</h3>
            </div>
            
            {documentPerformance.length === 0 ? (
              <div className="text-center py-12">
-               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 text-slate-400 mb-4">
+               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/5 text-slate-400 mb-4">
                  <FileText className="w-8 h-8" />
                </div>
-               <h4 className="text-slate-800 font-semibold mb-1">No documents viewed</h4>
+               <h4 className="text-slate-200 font-semibold mb-1">No documents viewed</h4>
                <p className="text-slate-500 text-sm">Documents inside your data rooms will appear here.</p>
              </div>
            ) : (
              <div className="overflow-x-auto">
-               <table className="w-full text-left text-sm text-slate-600">
-                  <thead className="bg-slate-50/50 text-slate-500 font-medium border-b border-slate-100">
+               <table className="w-full text-left text-sm text-slate-300">
+                  <thead className="bg-[#0F141E] text-slate-500 font-medium border-b border-white/5">
                      <tr>
                         <th className="px-6 py-4">Title</th>
                         <th className="px-6 py-4">Total Views</th>
                         <th className="px-6 py-4">Last Viewed</th>
                      </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-white/5">
                      {documentPerformance.map((doc) => (
-                        <tr key={doc.id} className="hover:bg-slate-50/50 transition-colors">
-                           <td className="px-6 py-4 font-medium text-slate-800 truncate max-w-[150px]" title={doc.title}>
+                        <tr key={doc.id} className="hover:bg-white/5 transition-colors">
+                           <td className="px-6 py-4 font-medium text-slate-200 truncate max-w-[150px]" title={doc.title}>
                              {doc.title}
                            </td>
                            <td className="px-6 py-4">{doc.views}</td>
-                           <td className="px-6 py-4 text-slate-500">
+                           <td className="px-6 py-4 text-slate-400">
                              {doc.lastViewed ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' }).format(doc.lastViewed) : '--'}
                            </td>
                         </tr>

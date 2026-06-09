@@ -10,7 +10,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useTemplates } from '../hooks/useTemplates';
 import { useStore } from '../store';
-import { useDocumentStore } from '../lib/store/useDocumentStore';
+import { createWorkspaceFromTemplate, inferRenderMode } from '../lib/documents';
 import { Template } from '../types';
 import PageWrapper from '../components/layout/PageWrapper';
 import SEOHead from '../components/Shared/SEOHead';
@@ -49,7 +49,6 @@ const STAGES = [
 export default function SolutionsPage() {
   const navigate  = useNavigate();
   const { user } = useStore();
-  const { createDocumentFromTemplate } = useDocumentStore();
   const {
     templates,
     searchQuery, setSearchQuery,
@@ -73,13 +72,18 @@ export default function SolutionsPage() {
     
     try {
       toast.loading("Generating workspace...", { id: "gen-doc" });
-      const docId = await createDocumentFromTemplate(template.id, template);
+      const mode = inferRenderMode(template);
+      const res = await createWorkspaceFromTemplate({
+        userId: user.uid,
+        template,
+        mode,
+      });
       toast.success("Workspace ready!", { id: "gen-doc", duration: 2000 });
-      navigate(`/documents/${docId}`);
+      navigate(res.route);
     } catch(err: any) {
       toast.error(err.message || "Failed to create document workspace.", { id: "gen-doc", duration: 3000 });
     }
-  }, [user, navigate, createDocumentFromTemplate]);
+  }, [user, navigate]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 

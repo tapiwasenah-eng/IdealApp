@@ -32,6 +32,7 @@ export async function inviteMember(workspaceId: string, email: string, role: Mem
   // In production: trigger Cloud Function to send invite email via SendGrid/Resend
   // The email would contain: https://app/invite/accept/{token}
   console.log(`[TeamService] Invite sent to ${email} with token ${token}`);
+  import('../lib/analytics').then(({ track }) => track('collaborator_invited', { workspace_id: workspaceId, role }));
   return ref.id;
 }
 

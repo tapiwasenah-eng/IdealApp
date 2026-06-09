@@ -6,10 +6,13 @@ import {
   updateProfile,
   signInWithPopup,
   signOut as firebaseSignOut,
+  GoogleAuthProvider
 } from 'firebase/auth';
 import toast from 'react-hot-toast';
-import { auth, googleProvider } from '../lib/firebase';
+import { auth } from '../lib/firebase';
 import { useStore } from '../store';
+
+const googleProvider = new GoogleAuthProvider();
 
 export function useAuth() {
   const { user, loading, setUser, setLoading } = useStore();

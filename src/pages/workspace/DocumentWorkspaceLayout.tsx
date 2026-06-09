@@ -6,32 +6,66 @@ import { AIChatRail } from "./AIChatRail";
 import { designSystem } from "../../lib/design-system";
 import { useDocumentStore } from "../../lib/store/useDocumentStore";
 import { ArrowLeft, View } from "lucide-react";
+import { auth } from "../../lib/firebase";
 import { motion } from "framer-motion";
 
 export const DocumentWorkspaceLayout: React.FC = () => {
   const { documentId } = useParams<{ documentId: string }>();
   const navigate = useNavigate();
   // Do not name local variables 'document' here; use 'docState' to avoid shadowing global document object
-  const { document: docState, loadDocumentById, investorView, setInvestorView, undoAction, history } =
+  const { document: docState, loadDocument, investorView, setInvestorView, undoAction, history } =
     useDocumentStore();
   const { colors, typography, componentVariants } = designSystem;
 
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const [nudgeShown, setNudgeShown] = useState(false);
+
   useEffect(() => {
     let mounted = true;
     const fetchDoc = async () => {
       if (documentId) {
         setLoading(true);
-        await loadDocumentById(documentId);
+        await loadDocument(documentId);
         if (mounted) setLoading(false);
       }
     };
     fetchDoc();
     setMounted(true);
     return () => { mounted = false; };
-  }, [documentId, loadDocumentById]);
+  }, [documentId, loadDocument]);
+
+  useEffect(() => {
+    if (!docState || nudgeShown) return;
+    
+    // Check if >= 3 sections with content
+    const filledSections = docState.sections.filter((s: any) => s.content && s.content.trim().length > 10);
+    if (filledSections.length >= 3) {
+      setNudgeShown(true);
+      import('react-hot-toast').then(({ default: toast }) => {
+        toast((t) => (
+          <div className="flex flex-col gap-1">
+            <span className="font-semibold text-slate-800">This is looking strong.</span>
+            <span className="text-sm text-slate-600">Share a read‑only link with investors in 1 click.</span>
+            <div className="mt-2 flex gap-2">
+              <button 
+                onClick={() => {
+                  toast.dismiss(t.id);
+                  const menu = document.getElementById("share-menu");
+                  if (menu) menu.style.display = "block";
+                }} 
+                className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded hover:bg-indigo-700"
+              >
+                Share now
+              </button>
+              <button onClick={() => toast.dismiss(t.id)} className="text-xs text-slate-500 hover:text-slate-700">Dismiss</button>
+            </div>
+          </div>
+        ), { duration: 8000, position: 'bottom-right' });
+      });
+    }
+  }, [docState, nudgeShown]);
 
   if (!mounted || loading) {
     return (
@@ -112,9 +146,91 @@ export const DocumentWorkspaceLayout: React.FC = () => {
             {investorView ? "Exit Investor View" : "Investor View"}
           </button>
 
-          <button className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors">
-            Share
-          </button>
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const menu = document.getElementById("share-menu");
+                if (menu) {
+                  menu.style.display = menu.style.display === "block" ? "none" : "block";
+                }
+              }}
+              className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              Share ▾
+            </button>
+            <div id="share-menu" className="hidden absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-lg shadow-xl py-1 z-50">
+              <button
+                onClick={() => {
+                  document.getElementById("share-menu")!.style.display = "none";
+                  import('../../lib/analytics').then(({ track }) => {
+                    track('investor_view_link_created', { document_id: documentId, workspace_id: documentId });
+                    track('shared_link_created', { doc_id: documentId, type: 'investor_view', loopType: 'share-investor-view' });
+                  });
+                  alert(`Sharable Investor View link generated!\n\nLink: https://idealapp.test/view/${documentId}\n\n(This creates an investor view entry in Firestore and tracking metrics.)`);
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 font-medium"
+              >
+                Share as Investor View
+              </button>
+              <button
+                onClick={async () => {
+                   document.getElementById("share-menu")!.style.display = "none";
+                   if (!docState) return;
+
+                   try {
+                     const { auth, db } = await import('../../lib/firebase');
+                     const { addDoc, collection } = await import('firebase/firestore');
+                     const { trackTemplateEvent } = await import('../../lib/analytics');
+                     
+                     if (!auth.currentUser) return;
+                     
+                     // Synthesize sections_schema
+                     const sections_schema = docState.sections.map((s) => ({
+                       id: s.id,
+                       type: 'text',
+                       heading: s.title,
+                       subheading: '',
+                       body: s.content?.replace(/<[^>]+>/g, '') || '', // stripping HTML as basic clean
+                       bullets: [],
+                       metrics: []
+                     }));
+
+                     const templateData = {
+                       name: `${docState.title} Template`,
+                       document_type: docState.type || "pitch_deck",
+                       category: "Founder-Built",
+                       sector: docState.industry || "general",
+                       sector_tags: [docState.industry || "general"],
+                       stage: "all",
+                       stage_tags: ["all"],
+                       complexity: "standard",
+                       is_premium: true, // Pro feature
+                       is_community: true,
+                       created_by: auth.currentUser.uid,
+                       version: 1,
+                       sections_schema
+                     };
+
+                     // Save to user templates
+                     await addDoc(collection(db, "users", auth.currentUser.uid, "templates"), templateData);
+                     // Submit to community templates
+                     const templateDocRef = await addDoc(collection(db, "templates"), templateData);
+
+                     trackTemplateEvent('template_used', { action: 'saved_as_community_template', document_id: documentId, template_id: templateDocRef.id, category: "Founder-Built", sector: docState.industry || "general", is_community: true, is_premium: true });
+                     alert("Successfully saved anonymised document to Community Templates.");
+                     navigate('/templates/community');
+                   } catch (err) {
+                     console.error("Failed to save as template", err);
+                     alert("Failed to save as template.");
+                   }
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 border-t border-slate-100"
+              >
+                Save as Community Template <span className="text-xs bg-indigo-100 text-indigo-700 px-1 py-0.5 rounded ml-2">Pro</span>
+              </button>
+            </div>
+          </div>
 
           <div className="relative">
             <button
@@ -135,6 +251,10 @@ export const DocumentWorkspaceLayout: React.FC = () => {
                 onClick={async () => {
                   document.getElementById("export-menu")!.style.display = "none";
                   try {
+                    const { checkExportLimit } = await import('../../lib/exportLimits');
+                    if (auth.currentUser) {
+                      await checkExportLimit(auth.currentUser.uid);
+                    }
                     const res = await fetch(`/api/export/pdf/${documentId}`);
                     if (!res.ok) throw new Error("Export failed");
                     const blob = await res.blob();
@@ -143,8 +263,32 @@ export const DocumentWorkspaceLayout: React.FC = () => {
                     a.href = url;
                     a.download = `${docState?.title || 'document'}.pdf`;
                     a.click();
-                  } catch (e) {
-                     alert("Failed to export PDF. Please try again.");
+                    import('../../lib/analytics').then(({ track }) => {
+                       track('document_exported', { document_id: documentId, format: 'pdf' });
+                       track('shared_link_created', { doc_id: documentId, type: 'export', loopType: 'export-pdf' });
+                    });
+                    import('react-hot-toast').then(({ default: toast }) => {
+                      toast.success(
+                        (t) => (
+                          <div className="flex flex-col gap-1">
+                            <span className="font-semibold text-slate-800">Export Complete!</span>
+                            <span className="text-sm text-slate-600">Loved this deck? Invite your co-founder to refine it with AI in one click.</span>
+                            <div className="mt-2 flex gap-2">
+                              <button onClick={() => toast.dismiss(t.id)} className="text-xs text-slate-500 hover:text-slate-700">Dismiss</button>
+                            </div>
+                          </div>
+                        ),
+                        { duration: 6000 }
+                      );
+                    });
+                  } catch (e: any) {
+                    if (e.message?.includes('FREEMIUM_LIMIT')) {
+                      import('react-hot-toast').then(({ default: toast }) => {
+                        toast.error(e.message.split(': ')[1], { duration: 6000 });
+                      });
+                    } else {
+                      alert("Failed to export PDF. Please try again.");
+                    }
                   }
                 }}
                 className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
@@ -155,6 +299,10 @@ export const DocumentWorkspaceLayout: React.FC = () => {
                 onClick={async () => {
                    document.getElementById("export-menu")!.style.display = "none";
                   try {
+                    const { checkExportLimit } = await import('../../lib/exportLimits');
+                    if (auth.currentUser) {
+                      await checkExportLimit(auth.currentUser.uid);
+                    }
                     const res = await fetch(`/api/export/pptx/${documentId}`);
                     if (!res.ok) throw new Error("Export failed");
                     const blob = await res.blob();
@@ -163,8 +311,32 @@ export const DocumentWorkspaceLayout: React.FC = () => {
                     a.href = url;
                     a.download = `${docState?.title || 'document'}.pptx`;
                     a.click();
-                  } catch (e) {
-                     alert("Failed to export PPTX. Please try again.");
+                    import('../../lib/analytics').then(({ track }) => {
+                       track('document_exported', { document_id: documentId, format: 'pptx' });
+                       track('shared_link_created', { doc_id: documentId, type: 'export', loopType: 'export-pptx' });
+                    });
+                    import('react-hot-toast').then(({ default: toast }) => {
+                      toast.success(
+                        (t) => (
+                          <div className="flex flex-col gap-1">
+                            <span className="font-semibold text-slate-800">Export Complete!</span>
+                            <span className="text-sm text-slate-600">Loved this deck? Invite your co-founder to refine it with AI in one click.</span>
+                            <div className="mt-2 flex gap-2">
+                              <button onClick={() => toast.dismiss(t.id)} className="text-xs text-slate-500 hover:text-slate-700">Dismiss</button>
+                            </div>
+                          </div>
+                        ),
+                        { duration: 6000 }
+                      );
+                    });
+                  } catch (e: any) {
+                    if (e.message?.includes('FREEMIUM_LIMIT')) {
+                      import('react-hot-toast').then(({ default: toast }) => {
+                        toast.error(e.message.split(': ')[1], { duration: 6000 });
+                      });
+                    } else {
+                      alert("Failed to export PPTX. Please try again.");
+                    }
                   }
                 }}
                 className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"

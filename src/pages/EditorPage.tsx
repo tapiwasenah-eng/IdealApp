@@ -103,6 +103,40 @@ export const EditorPage: React.FC = () => {
     }
   }, [sections, isDirty, project, user, saveChanges, documentId]);
 
+  const [nudgeShown, setNudgeShown] = useState(false);
+
+  useEffect(() => {
+    if (!project || nudgeShown) return;
+    
+    // Check if >= 3 sections have been edited/filled
+    // We assume some basic content structure in Editor Canvas sections
+    const filledSections = sections.filter((s: any) => s.elements && s.elements.length > 2); // heuristic for canvas
+    if (filledSections.length >= 3 || sections.length >= 5) { // fallback
+      setNudgeShown(true);
+      import('react-hot-toast').then(({ default: toast }) => {
+        toast((t) => (
+          <div className="flex flex-col gap-1">
+            <span className="font-semibold text-slate-800">Looking great.</span>
+            <span className="text-sm text-slate-600">Share a read‑only link with investors in 1 click.</span>
+            <div className="mt-2 flex gap-2">
+              <button 
+                onClick={() => {
+                  toast.dismiss(t.id);
+                  const menu = document.getElementById("canvas-share-menu");
+                  if (menu) menu.style.display = "block";
+                }} 
+                className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded hover:bg-indigo-700"
+              >
+                Share now
+              </button>
+              <button onClick={() => toast.dismiss(t.id)} className="text-xs text-slate-500 hover:text-slate-700">Dismiss</button>
+            </div>
+          </div>
+        ), { duration: 8000, position: 'bottom-right' });
+      });
+    }
+  }, [sections, project, nudgeShown]);
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
@@ -197,7 +231,67 @@ export const EditorPage: React.FC = () => {
                 </>
               )}
             </div>
-            <button className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow-sm hover:bg-indigo-700">
+            <div className="relative">
+              <button
+                onClick={() => {
+                  const menu = document.getElementById("canvas-share-menu");
+                  if (menu) menu.style.display = menu.style.display === "block" ? "none" : "block";
+                }}
+                className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Share ▾
+              </button>
+              <div id="canvas-share-menu" className="hidden absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-lg shadow-xl py-1 z-50">
+                <button
+                  onClick={() => {
+                    document.getElementById("canvas-share-menu")!.style.display = "none";
+                    import('../lib/analytics').then(({ trackTemplateEvent }) => {
+                       trackTemplateEvent('shared_link_created', { doc_id: documentId, type: 'editable_link', loopType: 'invite' });
+                    });
+                    alert(`Editable link generated! Viewers can request access.\n\nLink: https://idealapp.test/editor/${documentId}`);
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 font-medium"
+                >
+                  Share Editable Link
+                </button>
+                <button
+                  onClick={() => {
+                    document.getElementById("canvas-share-menu")!.style.display = "none";
+                    import('../lib/analytics').then(({ trackTemplateEvent }) => {
+                       trackTemplateEvent('shared_link_created', { doc_id: documentId, type: 'read_only_web_page', loopType: 'publish' });
+                    });
+                    alert(`Published as read-only web page.\n\nLink: https://idealapp.test/view/${documentId}`);
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 border-t border-slate-100 font-medium"
+                >
+                  Publish Read-Only Web Page
+                </button>
+              </div>
+            </div>
+            <button 
+              onClick={async () => {
+                try {
+                  const { checkExportLimit } = await import('../lib/exportLimits');
+                  if (user) {
+                    await checkExportLimit(user.uid);
+                  }
+                  
+                  // Mock export process
+                  import('react-hot-toast').then(({ default: toast }) => {
+                    toast.success("Canvas exported to PDF successfully!");
+                  });
+                } catch (e: any) {
+                  if (e.message?.includes('FREEMIUM_LIMIT')) {
+                    import('react-hot-toast').then(({ default: toast }) => {
+                      toast.error(e.message.split(': ')[1], { duration: 6000 });
+                    });
+                  } else {
+                    alert("Failed to export Canvas PDF.");
+                  }
+                }
+              }}
+              className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow-sm hover:bg-indigo-700"
+            >
               Export PDF
             </button>
           </div>

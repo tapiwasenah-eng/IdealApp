@@ -184,6 +184,18 @@ export const useProjectStore = create<ProjectState>()(
 
         await setDoc(doc(db, 'dataRoomLinks', token), docData);
 
+        try {
+          const { trackTemplateEvent } = await import('../lib/analytics');
+          trackTemplateEvent('shared_link_created', {
+            type: 'data_room',
+            link_id: token,
+            token,
+            owner_id: auth.currentUser.uid,
+          });
+        } catch (e) {
+          console.error("analytics error", e);
+        }
+
         await get().loadDataRoomLinks();
         return { publicUrl: `${window.location.origin}/data-room/${token}` };
       },

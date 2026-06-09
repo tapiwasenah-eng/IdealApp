@@ -6,10 +6,11 @@ import { designSystem } from '../../lib/design-system';
 interface SectionEditorProps {
   content: string;
   onChange: (content: string) => void;
+  onBlur?: () => void;
   readOnly?: boolean;
 }
 
-export const SectionEditor: React.FC<SectionEditorProps> = ({ content, onChange, readOnly = false }) => {
+export const SectionEditor: React.FC<SectionEditorProps> = ({ content, onChange, onBlur, readOnly = false }) => {
   const { typography, colors } = designSystem;
 
   const editor = useEditor({
@@ -30,6 +31,9 @@ export const SectionEditor: React.FC<SectionEditorProps> = ({ content, onChange,
     editable: !readOnly,
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML());
+    },
+    onBlur: () => {
+      if (onBlur) onBlur();
     },
     editorProps: {
       attributes: {

@@ -6,22 +6,7 @@
     <meta name="theme-color" content="#8b3dff" />
 
     <!-- DNS prefetch for external services -->
-    <link rel="dns-prefetch" href="//www.googletagmanager.com" />
     <link rel="dns-prefetch" href="//fonts.googleapis.com" />
-
-    <!-- Google tag (gtag.js) — load async to avoid render blocking -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-XXXXXXXXXX', {
-        page_path: window.location.pathname,
-        anonymize_ip: true,         // GDPR compliance
-        cookie_flags: 'SameSite=None;Secure',
-        send_page_view: false        // We'll send manually on route changes
-      });
-    </script>
 
     <!-- Microsoft Clarity (TODO: Add valid project ID) -->
     <!--
@@ -50,17 +35,6 @@
     />
   </head>
   <body>
-    <script>
-      if (location.hostname === 'localhost' || location.hostname.includes('.run.app')) {
-        const originalError = console.error;
-        console.error = function(...args) {
-          if (args[0] && typeof args[0] === 'string' && args[0].includes('[vite] failed to connect to websocket')) {
-            return;
-          }
-          originalError.apply(console, args);
-        };
-      }
-    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -1,395 +1,464 @@
-import { useState, useMemo, useCallback } from 'react';
+// src/pages/TemplatesPage.tsx
+
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Search,
-  Star,
-  Lock,
-  Crown,
-  FileText,
-  SlidersHorizontal,
-  Sparkles,
-  ArrowRight,
-  ArrowLeft,
-  Target,
-  Briefcase,
-  BarChart2,
-  X,
-  Eye
-} from 'lucide-react';
-import { TEMPLATES } from '../data/templates';
+import { Plus, Sparkles, Filter, Loader2 } from 'lucide-react';
+import { collection, getDocs } from 'firebase/firestore';
+import { AnimatePresence, motion } from 'framer-motion';
+import { db } from '../lib/firebase';
 import { useStore } from '../store';
-import { useDocumentStore } from '../lib/store/useDocumentStore';
-import PageWrapper from '../components/layout/PageWrapper';
-import SEOHead from '../components/Shared/SEOHead';
-import { organizationSchema, breadcrumbSchema } from '../data/seo-schemas';
+import type { TemplateDoc } from '../store';
+import { createWorkspaceFromTemplate, inferRenderMode } from '../lib/services/documents';
+import { track } from '../lib/analytics';
+import AITemplateGenerator from '../components/templates/AITemplateGenerator';
 
-const CATEGORIES = [
-  { id: 'All', label: 'All Templates', icon: FileText },
-  { id: 'Pitch Decks', label: 'Pitch Decks', icon: Target },
-  { id: 'Business Plans', label: 'Business Plans', icon: Briefcase },
-  { id: 'Marketing', label: 'Marketing', icon: FileText },
-  { id: 'Legal', label: 'Legal', icon: FileText },
-  { id: 'Financial', label: 'Financial', icon: BarChart2 },
-  { id: 'HR', label: 'HR', icon: FileText },
-  { id: 'Operations', label: 'Operations', icon: FileText },
-  { id: 'Enterprise', label: 'Enterprise', icon: FileText },
-] as const;
-
-type SortOption = 'popular' | 'newest' | 'az';
-
-const PAGE_SIZE = 12;
-
-function StarRating({ rating }: { rating: number }) {
-  return (
-    <div className="flex items-center gap-0.5">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Star
-          key={i}
-          className={`w-3 h-3 ${
-            i < Math.floor(rating) ? 'text-amber-400 fill-amber-400' : 'text-gray-200 fill-gray-200'
-          }`}
-        />
-      ))}
-      <span className="text-xs text-gray-500 ml-1">{rating.toFixed(1)}</span>
-    </div>
-  );
+interface TemplateCardProps {
+  template: TemplateDoc;
+  onUse: (template: TemplateDoc) => void;
+  onOpen: (template: TemplateDoc) => void;
 }
 
-function TemplateCard({
+const TemplateCard: React.FC<TemplateCardProps> = ({
   template,
   onUse,
-  onPreview,
-  isLocked,
-  isAnonymous,
-}: any) {
-  const CategoryIcon = template.category?.toLowerCase().includes('pitch') ? Target : 
-                      template.category?.toLowerCase().includes('business') ? Briefcase : 
-                      template.category?.toLowerCase().includes('financial') ? BarChart2 : 
-                      FileText;
+  onOpen,
+}) => {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 flex flex-col justify-between hover:border-indigo-500/60 hover:bg-slate-900/80 transition-colors">
+      <div className="cursor-pointer" onClick={() => onOpen(template)}>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-semibold text-slate-50 truncate">
+            {template.name}
+          </h3>
+          {template.is_community && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-600/20 text-indigo-300 border border-indigo-500/40">
+              Founder-Built
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-slate-400 mb-3">
+          {(template.document_type || 'pitch_deck').replace(/_/g, ' ')}
+        </p>
+        <div className="flex flex-wrap gap-1">
+          {template.sector && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-900 text-slate-300 border border-slate-700">
+              {template.sector}
+            </span>
+          )}
+          {template.stage && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-900 text-slate-300 border border-slate-700">
+              {template.stage}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => onUse(template)}
+          className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-indigo-600 text-xs font-semibold text-white hover:bg-indigo-500"
+        >
+          Use template
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpen(template)}
+          className="text-[11px] text-slate-400 hover:text-slate-200"
+        >
+          Preview
+        </button>
+      </div>
+    </div>
+  );
+};
+
+type CategoryKey =
+  | 'all'
+  | 'saas'
+  | 'deeptech'
+  | 'fintech'
+  | 'pitch_decks'
+  | 'financial_models'
+  | 'founder_built';
+
+const categoryToFilter: Record<CategoryKey, (t: TemplateDoc) => boolean> = {
+  all: () => true,
+  saas: (t) => t.category === 'saas',
+  deeptech: (t) => t.category === 'deeptech',
+  fintech: (t) => t.category === 'fintech',
+  pitch_decks: (t) => t.category === 'pitch_deck',
+  financial_models: (t) => t.category === 'financial_model',
+  founder_built: (t) => !!t.is_community,
+};
+
+const TemplatesPage: React.FC = () => {
+  const navigate = useNavigate();
+
+  const user = useStore((state) => state.user);
+  const setShowAuthModal = useStore((state) => state.setShowAuthModal);
+
+  const [templates, setTemplates] = useState<TemplateDoc[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<CategoryKey>('all');
+  const [search, setSearch] = useState('');
+  const [isOpeningGenerator, setIsOpeningGenerator] = useState(false);
+  const [showGenerator, setShowGenerator] = useState(false);
+
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      setLoading(true);
+      try {
+        const templatesRef = collection(db, 'templates');
+        const snapshot = await getDocs(templatesRef);
+        const data: TemplateDoc[] = snapshot.docs.map((docSnap) => {
+          const d = docSnap.data() as any;
+          return {
+            id: docSnap.id,
+            name: d.name,
+            document_type: d.document_type,
+            category: d.category ?? '',
+            sector: d.sector ?? '',
+            sector_tags: Array.isArray(d.sector_tags) ? d.sector_tags : [],
+            stage: d.stage ?? '',
+            stage_tags: Array.isArray(d.stage_tags) ? d.stage_tags : [],
+            complexity: d.complexity ?? 'standard',
+            is_premium: !!d.is_premium,
+            is_community: !!d.is_community,
+            created_by: d.created_by,
+            rating: d.rating,
+            page_count: d.page_count,
+            sections_schema: Array.isArray(d.sections_schema)
+              ? d.sections_schema
+              : [],
+            version: d.version ?? 1,
+            created_at: d.created_at,
+            updated_at: d.updated_at,
+          };
+        });
+        setTemplates(data);
+      } catch (e) {
+        console.error('Failed to fetch templates', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTemplates();
+  }, []);
+
+  const filteredTemplates = useMemo(() => {
+    const byCategory = templates.filter((t) => {
+      const fn = categoryToFilter[activeCategory] ?? categoryToFilter.all;
+      return fn(t);
+    });
+
+    if (!search.trim()) return byCategory;
+
+    const q = search.trim().toLowerCase();
+    return byCategory.filter((t) => {
+      return (
+        t.name.toLowerCase().includes(q) ||
+        t.document_type.toLowerCase().includes(q) ||
+        t.category.toLowerCase().includes(q)
+      );
+    });
+  }, [templates, activeCategory, search]);
+
+  const handleUseTemplateAuthed = async (tmpl: TemplateDoc) => {
+    if (!user) return;
+
+    try {
+      track('template_use_clicked', {
+        template_id: tmpl.id,
+        document_type: tmpl.document_type,
+      });
+      const mode = inferRenderMode(tmpl);
+      const res = await createWorkspaceFromTemplate({
+        userId: user.uid,
+        template: tmpl,
+        mode,
+      });
+      navigate(res.route);
+    } catch (e: any) {
+      console.error('Failed to create document from template', e);
+      if (e.message?.includes('FREEMIUM_LIMIT')) {
+        import('react-hot-toast').then(({ default: toast }) => {
+          toast.error(e.message.split(': ')[1], { duration: 5000 });
+        });
+      }
+    }
+  };
+
+  const handleUseTemplate = async (tmpl: TemplateDoc) => {
+    if (!user) {
+      setShowAuthModal(true);
+      try {
+        window.localStorage.setItem(
+          'idealapp_pending_template_action',
+          JSON.stringify({
+            type: 'use_template',
+            templateId: tmpl.id,
+          })
+        );
+      } catch (e) {
+        console.warn('Failed to persist pending template action', e);
+      }
+      return;
+    }
+
+    await handleUseTemplateAuthed(tmpl);
+  };
+
+  const handleOpenTemplate = (tmpl: TemplateDoc) => {
+    if (!tmpl.id) return;
+    navigate(`/templates/${tmpl.id}`);
+  };
+
+  const openGenerator = () => {
+    if (!user) {
+      setShowAuthModal(true);
+      try {
+        window.localStorage.setItem(
+          'idealapp_pending_template_action',
+          JSON.stringify({
+            type: 'generate_template',
+          })
+        );
+      } catch (e) {
+        console.warn('Failed to persist pending template action', e);
+      }
+      return;
+    }
+
+    setIsOpeningGenerator(true);
+    setShowGenerator(true);
+    setTimeout(() => {
+      setIsOpeningGenerator(false);
+    }, 300);
+  };
+
+  // Resume pending template actions after login
+  useEffect(() => {
+    if (!user) return;
+
+    try {
+      const raw = window.localStorage.getItem(
+        'idealapp_pending_template_action'
+      );
+      if (!raw) return;
+      const payload = JSON.parse(raw);
+
+      if (payload?.type === 'use_template' && payload.templateId) {
+        const tmpl = templates.find((t) => t.id === payload.templateId);
+        if (tmpl) {
+          handleUseTemplateAuthed(tmpl);
+        }
+      }
+
+      if (payload?.type === 'generate_template') {
+        openGenerator();
+      }
+
+      window.localStorage.removeItem('idealapp_pending_template_action');
+    } catch (e) {
+      console.warn('Failed to restore pending template action', e);
+    }
+  }, [user, templates]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <motion.div
-      whileHover={{ y: -4 }}
-      className="group relative rounded-2xl border border-zinc-200 bg-white overflow-hidden hover:shadow-xl hover:border-indigo-200 transition-all duration-300 cursor-pointer flex flex-col"
-    >
-      {/* Icon Area */}
-      <div className="relative h-48 overflow-hidden bg-gradient-to-br from-zinc-50 to-white border-b border-zinc-100 flex items-center justify-center">
-        <div className="absolute inset-0 flex items-center justify-center opacity-10 blur-2xl scale-150 pointer-events-none">
-          <div className="relative w-32 h-32">
-            <div className="absolute top-0 left-0 w-16 h-16 rounded-full bg-[#EA580C]" />
-            <div className="absolute top-0 right-0 w-16 h-16 rounded-full bg-[#16A34A]" />
-            <div className="absolute bottom-0 left-0 w-16 h-16 rounded-full bg-[#3B82F6]" />
-            <div className="absolute bottom-0 right-0 w-16 h-16 rounded-full bg-[#8B5CF6]" />
-          </div>
-        </div>
-        
-        <div className="relative w-20 h-20 rounded-2xl bg-white/40 backdrop-blur-md border border-white/60 shadow-xl flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform duration-500">
-          {CategoryIcon && <CategoryIcon className="w-10 h-10" />}
-        </div>
-        
-        <div className="absolute top-4 left-4">
-          <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/80 backdrop-blur-sm text-zinc-800 uppercase tracking-widest shadow-sm flex items-center gap-1.5 border border-white/40">
-            {CategoryIcon && <CategoryIcon className="w-3 h-3 text-indigo-600" />}
-            {template.category}
+    <div className="min-h-screen bg-slate-950 text-slate-50">
+      <header className="h-[60px] border-b border-slate-900 bg-slate-950/80 backdrop-blur flex items-center justify-between px-4 sm:px-6">
+        <div className="flex items-center gap-3">
+          <h1 className="text-base sm:text-lg font-semibold tracking-tight">
+            Template Library
+          </h1>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-600/10 text-indigo-300 border border-indigo-500/40">
+            AI Templates
           </span>
         </div>
+        <button
+          type="button"
+          onClick={openGenerator}
+          className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+        >
+          {isOpeningGenerator ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Sparkles className="w-4 h-4" />
+          )}
+          <span>AI Template Generator</span>
+        </button>
+      </header>
 
-        {template.isPremium && (
-          <div className="absolute top-4 right-4 flex items-center gap-1 bg-amber-400 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-            <Crown className="w-3 h-3" />
-            PRO
-          </div>
-        )}
-      </div>
-
-      <div className="p-6 flex-1 flex flex-col">
-        <h3 className="text-xl font-bold text-[#111827] group-hover:text-indigo-600 transition-colors mb-2">
-          {template.name || template.title}
-        </h3>
-        
-        <p className="text-sm text-zinc-500 mb-4 line-clamp-2 leading-relaxed flex-1">
-          {template.description}
-        </p>
-
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              <FileText className="w-3.5 h-3.5 text-zinc-400" />
-              <span className="text-xs text-zinc-500 font-medium">{template.pageCount || 0} pages</span>
+      <main className="flex">
+        {/* Categories Sidebar */}
+        <aside className="w-56 border-r border-slate-900 bg-slate-950/90 hidden md:block">
+          <div className="px-4 py-4">
+            <div className="flex items-center gap-2 mb-4">
+              <Filter className="w-4 h-4 text-slate-400" />
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-[0.16em]">
+                Categories
+              </span>
             </div>
+            <nav className="space-y-1 text-sm">
+              <button
+                type="button"
+                onClick={() => setActiveCategory('all')}
+                className={`w-full text-left px-3 py-1.5 rounded-lg ${
+                  activeCategory === 'all'
+                    ? 'bg-slate-900 text-slate-50'
+                    : 'text-slate-400 hover:bg-slate-900/60'
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveCategory('saas')}
+                className={`w-full text-left px-3 py-1.5 rounded-lg ${
+                  activeCategory === 'saas'
+                    ? 'bg-slate-900 text-slate-50'
+                    : 'text-slate-400 hover:bg-slate-900/60'
+                }`}
+              >
+                saas
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveCategory('deeptech')}
+                className={`w-full text-left px-3 py-1.5 rounded-lg ${
+                  activeCategory === 'deeptech'
+                    ? 'bg-slate-900 text-slate-50'
+                    : 'text-slate-400 hover:bg-slate-900/60'
+                }`}
+              >
+                deeptech
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveCategory('fintech')}
+                className={`w-full text-left px-3 py-1.5 rounded-lg ${
+                  activeCategory === 'fintech'
+                    ? 'bg-slate-900 text-slate-50'
+                    : 'text-slate-400 hover:bg-slate-900/60'
+                }`}
+              >
+                fintech
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveCategory('pitch_decks')}
+                className={`w-full text-left px-3 py-1.5 rounded-lg ${
+                  activeCategory === 'pitch_decks'
+                    ? 'bg-slate-900 text-slate-50'
+                    : 'text-slate-400 hover:bg-slate-900/60'
+                }`}
+              >
+                Pitch Decks
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveCategory('financial_models')}
+                className={`w-full text-left px-3 py-1.5 rounded-lg ${
+                  activeCategory === 'financial_models'
+                    ? 'bg-slate-900 text-slate-50'
+                    : 'text-slate-400 hover:bg-slate-900/60'
+                }`}
+              >
+                Financial Models
+              </button>
+              <div className="mt-4">
+                <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                  Community
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory('founder_built')}
+                  className={`mt-1 w-full text-left px-3 py-1.5 rounded-lg ${
+                    activeCategory === 'founder_built'
+                      ? 'bg-slate-900 text-indigo-300'
+                      : 'text-slate-400 hover:bg-slate-900/60'
+                  }`}
+                >
+                  Founder-Built
+                </button>
+              </div>
+            </nav>
           </div>
-          {template.rating != null && <StarRating rating={template.rating} />}
-        </div>
+        </aside>
 
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={onPreview}
-            className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-zinc-200 bg-white text-zinc-600 hover:text-[#111827] hover:border-zinc-300 text-xs font-bold transition-all shadow-sm"
-          >
-            <Eye className="w-4 h-4" />
-            Preview
-          </button>
-          <button
-            onClick={onUse}
-            className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#111827] text-white text-xs font-bold hover:bg-zinc-800 transition-all shadow-md shadow-zinc-200"
-          >
-            {isAnonymous ? 'Sign Up' : isLocked ? 'Upgrade' : 'Use'}
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-export default function TemplatesPage({ inDashboard }: { inDashboard?: boolean }) {
-  const navigate = useNavigate();
-  const { user, userProfile } = useStore();
-  const { createDocumentFromTemplate } = useDocumentStore();
-  const [activeCategory, setActiveCategory] = useState<string>('All');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<SortOption>('popular');
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [showFilters, setShowFilters] = useState(false);
-
-  const isAnonymous = !user;
-  const isPaidOrAdmin = userProfile?.subscription === 'pro' || userProfile?.subscription === 'enterprise' || userProfile?.role === 'admin';
-
-  const filtered = useMemo(() => {
-    let result = [...TEMPLATES];
-
-    if (activeCategory !== 'All') {
-      result = result.filter((t) => {
-        const cat = (t.category ?? '').toLowerCase();
-        return cat === activeCategory.toLowerCase() ||
-          cat.includes(activeCategory.toLowerCase().replace(/s$/, ''));
-      });
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(
-        (t) =>
-          (t.name ?? t.title ?? '').toLowerCase().includes(q) ||
-          (t.description ?? '').toLowerCase().includes(q) ||
-          (t.category ?? '').toLowerCase().includes(q)
-      );
-    }
-
-    if (sortBy === 'popular') {
-      result.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
-    } else if (sortBy === 'newest') {
-      result.sort((a, b) =>
-        new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
-      );
-    } else if (sortBy === 'az') {
-      result.sort((a, b) =>
-        (a.name ?? a.title ?? '').localeCompare(b.name ?? b.title ?? '')
-      );
-    }
-
-    return result;
-  }, [activeCategory, searchQuery, sortBy]);
-
-  const visible = filtered.slice(0, visibleCount);
-
-  const handleUse = useCallback(
-    (template: any) => {
-      if (isAnonymous) {
-      navigate('/auth?mode=signup&redirect=templates');
-        return;
-      }
-      if (template.isPremium && !isPaidOrAdmin) {
-        navigate('/pricing');
-        return;
-      }
-      const docId = createDocumentFromTemplate(template.id, template);
-      navigate(`/documents/${docId}`);
-    },
-    [isAnonymous, isPaidOrAdmin, navigate, createDocumentFromTemplate]
-  );
-
-  const handlePreview = useCallback(
-    (template: any) => {
-      navigate(`/templates/${template.id}`);
-    },
-    [navigate]
-  );
-
-  const content = (
-    <>
-      <SEOHead
-        title="54 Professional Templates — Pitch Decks, Business Plans & Financial Models"
-        description="Choose from 54 professionally designed templates for pitch decks, business plans, financial models, one-pagers, and investor memos. All editable with AI and drag-and-drop."
-        keywords="pitch deck templates, business plan templates, financial model templates, startup document templates, investor memo template, one-pager template, data room template, AI presentation templates, free pitch deck template"
-        canonicalUrl="https://idealapp.technology/templates"
-        ogImage="https://idealapp.technology/og/templates.png"
-        structuredData={[organizationSchema, breadcrumbSchema('/templates', 'Templates')]}
-      />
-      <div className={`min-h-screen bg-white ${inDashboard ? '' : ''}`}>
-        {/* Hero Section */}
-        <section className={`${inDashboard ? 'pt-8' : 'pt-32'} pb-12 px-6 text-center`}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-200 bg-indigo-50 text-indigo-600 text-xs font-medium mb-6">
-              <Sparkles className="w-3 h-3" />
-              {TEMPLATES.length}+ Professional Templates
-            </span>
-            <h1 className="text-3xl md:text-5xl font-black text-[#111827] mb-4 tracking-tight">
-              Find the Perfect Template
-            </h1>
-            <p className="text-lg text-zinc-600 max-w-2xl mx-auto">
-              Professionally designed document templates for every business need.
-              Customise with your brand in minutes.
-            </p>
-          </motion.div>
-        </section>
-
-        {/* Search + Filters */}
-        <div className="px-6 mb-8 max-w-7xl mx-auto">
-          <div className="flex gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-              <input
-                type="text"
-                placeholder="Search templates…"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-[#111827] placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-              />
+        {/* Template grid */}
+        <section className="flex-1 px-4 sm:px-6 py-5">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="flex-1">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name or type…"
+                  className="w-full h-9 rounded-lg bg-slate-900 border border-slate-800 px-3 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-500 text-xs">
+                  ⌘K
+                </span>
+              </div>
             </div>
             <button
-              onClick={() => setShowFilters(v => !v)}
-              className="flex items-center gap-2 px-4 py-3 bg-white border border-zinc-200 rounded-xl text-zinc-600 hover:text-[#111827] hover:border-zinc-300 transition-colors shadow-sm"
+              type="button"
+              onClick={() => navigate('/templates/custom')}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800"
             >
-              <SlidersHorizontal className="w-4 h-4" />
-              Sort
+              <Plus className="w-4 h-4" />
+              <span>Create Custom</span>
             </button>
           </div>
 
-          <AnimatePresence>
-            {showFilters && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="mt-4 p-4 bg-zinc-50 rounded-xl border border-zinc-100">
-                  <label className="block text-xs text-zinc-500 mb-2 uppercase tracking-wider font-semibold">Sort By</label>
-                  <select
-                    value={sortBy}
-                    onChange={e => setSortBy(e.target.value as SortOption)}
-                    className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-[#111827] text-sm focus:outline-none focus:border-indigo-500 shadow-sm"
-                  >
-                    <option value="popular">Most Popular</option>
-                    <option value="newest">Newest</option>
-                    <option value="az">A–Z</option>
-                  </select>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Tabs */}
-        <div className="px-6 mb-8 max-w-7xl mx-auto">
-          <div className="flex flex-wrap md:flex-nowrap gap-1 p-1 bg-zinc-100 rounded-xl border border-zinc-200 w-full md:w-fit">
-            {CATEGORIES.map(tab => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveCategory(tab.id)}
-                  className={`flex items-center justify-center md:justify-start gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all flex-1 md:flex-none ${
-                    activeCategory === tab.id
-                      ? 'bg-white text-indigo-600 shadow-sm'
-                      : 'text-zinc-500 hover:text-zinc-800'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Grid */}
-        <div className="px-6 pb-24 max-w-7xl mx-auto">
-          {filtered.length === 0 ? (
-            <div className="text-center py-20">
-              <Search className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500 text-lg font-medium">No templates found</p>
-              <button
-                onClick={() => { setSearchQuery(''); setActiveCategory('All'); }}
-                className="mt-4 text-indigo-600 text-sm font-medium hover:underline"
-              >
-                Clear filters
-              </button>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+            </div>
+          ) : filteredTemplates.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/80 px-4 py-8 text-center text-xs text-slate-400">
+              No templates found matching your criteria.
             </div>
           ) : (
-            <>
-              <div className="flex items-center justify-between mb-8">
-                <p className="text-sm text-slate-500 font-medium">
-                  Showing <span className="text-slate-900 font-bold">1-{Math.min(visibleCount, filtered.length)}</span> of <span className="text-slate-900 font-bold">{filtered.length}</span> Templates
-                </p>
-                <div className="h-px flex-1 bg-slate-100 mx-6 hidden md:block" />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {visible.map((template, i) => (
-                  <TemplateCard
-                    key={template.id}
-                    template={template}
-                    onUse={() => handleUse(template)}
-                    onPreview={() => handlePreview(template)}
-                    isLocked={!!(template.isPremium && !isPaidOrAdmin && !isAnonymous)}
-                    isAnonymous={isAnonymous}
-                  />
-                ))}
-              </div>
-
-              {visibleCount < filtered.length && (
-                <div className="text-center mt-12">
-                  <button
-                    onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}
-                    className="px-8 py-4 bg-white border-2 border-indigo-600 text-indigo-600 font-bold rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-lg shadow-indigo-100"
-                  >
-                    Load More Templates
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* CTA Section */}
-        {!inDashboard && isAnonymous && (
-          <section className="py-24 bg-zinc-50">
-            <div className="max-w-4xl mx-auto px-6 text-center">
-              <Sparkles className="w-12 h-12 text-indigo-600 mx-auto mb-6" />
-              <h2 className="text-3xl md:text-4xl font-black text-[#111827] mb-4 tracking-tight">
-                Ready to build your professional document?
-              </h2>
-              <p className="text-lg text-zinc-600 mb-10">
-                Join thousands of entrepreneurs using Ideal App to create high-quality documents in minutes.
-              </p>
-              <button
-                onClick={() => navigate('/auth?mode=signup')}
-                className="px-10 py-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200"
-              >
-                Get Started for Free
-              </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredTemplates.map((tmpl) => (
+                <TemplateCard
+                  key={tmpl.id}
+                  template={tmpl}
+                  onUse={handleUseTemplate}
+                  onOpen={handleOpenTemplate}
+                />
+              ))}
             </div>
-          </section>
-        )}
-      </div>
-    </>
-  );
+          )}
+        </section>
+      </main>
 
-  return inDashboard ? content : <PageWrapper>{content}</PageWrapper>;
-}
+      {/* AI Template Generator Modal */}
+      <AnimatePresence>
+        {showGenerator && (
+          <motion.div
+            key="ai-template-generator"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.16 }}
+            className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          >
+            <AITemplateGenerator
+              onClose={() => setShowGenerator(false)}
+              onTemplateCreated={(tmpl) =>
+                setTemplates((prev) => [tmpl, ...prev])
+              }
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export default TemplatesPage;

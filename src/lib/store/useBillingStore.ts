@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { track } from '../analytics';
 
 export type PlanType = 'free' | 'pro' | 'studio';
 
@@ -24,7 +25,10 @@ export const useBillingStore = create<BillingStore>((set, get) => ({
   isUpgradeModalOpen: false,
   upgradeModalFeature: null,
   setPlan: (plan) => set({ currentPlan: plan }),
-  openUpgradeModal: (feature = null) => set({ isUpgradeModalOpen: true, upgradeModalFeature: feature }),
+  openUpgradeModal: (feature = null) => {
+    track('upgrade_modal_shown', { feature_gated: feature || 'general' });
+    set({ isUpgradeModalOpen: true, upgradeModalFeature: feature });
+  },
   closeUpgradeModal: () => set({ isUpgradeModalOpen: false, upgradeModalFeature: null }),
   canUseFeature: (feature) => {
     const { currentPlan } = get();

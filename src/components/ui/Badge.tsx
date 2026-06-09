@@ -37,14 +37,14 @@ export const Badge: React.FC<BadgeProps> = ({
   let colorClasses: string;
 
   if (status) {
-    colorClasses = statusClasses[status];
+    colorClasses = statusClasses[status] || 'bg-gray-100 text-gray-600';
   } else if (variant !== 'status') {
     colorClasses = variantClasses[variant as Exclude<BadgeVariant, 'status'>];
   } else {
     colorClasses = 'bg-gray-100 text-gray-600';
   }
 
-  const content = children || (status ? status.replace('_', ' ') : '');
+  const content = children || (status ? String(status).replace('_', ' ') : 'Draft');
 
   return (
     <span

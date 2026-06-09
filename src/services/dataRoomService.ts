@@ -52,6 +52,7 @@ export async function validateShareLink(token: string, password?: string): Promi
 
 export async function trackView(token: string, viewerInfo: Record<string, string>): Promise<void> {
   try {
+    import('../lib/analytics').then(({ track }) => track('data_room_viewed', { token, viewer_info: viewerInfo }));
     await updateDoc(doc(db, 'dataRoomLinks', token), {
       viewCount: (await getDoc(doc(db, 'dataRoomLinks', token))).data()?.viewCount + 1 || 1,
       accessLog: arrayUnion({ ...viewerInfo, viewedAt: new Date().toISOString() }),

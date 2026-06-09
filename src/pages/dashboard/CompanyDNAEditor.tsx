@@ -1,29 +1,178 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { designSystem } from '../../lib/design-system';
 import { useCompanyDNAStore, CompanyDNA } from '../../lib/store/useCompanyDNAStore';
-import { CheckCircle2, ShieldAlert } from 'lucide-react';
+import { CheckCircle2, ShieldAlert, Save, Loader2 } from 'lucide-react';
+import { useAppStore } from '../../store/appStore';
+import { fetchCompanyDNA } from '../../lib/dashboardService';
+import { db } from '../../lib/firebase';
+import { doc, setDoc, Timestamp } from 'firebase/firestore';
+import { companyDnaCollection } from '../../lib/dashboardCollections';
+import { CompanyDNAProfile } from '../../lib/dashboardTypes';
 
 export const CompanyDNAEditor: React.FC = () => {
   const { colors, typography, spacing, radii, shadows } = designSystem;
   const { dna, updateDNA, getStrengthPercentage, loadDNA } = useCompanyDNAStore();
-  const strength = getStrengthPercentage();
+  const user = useAppStore(state => state.user);
+  
+  const [profile, setProfile] = useState<CompanyDNAProfile | null>(null);
+  const [name, setName] = useState("");
+  const [sector, setSector] = useState<string>("general");
+  const [stage, setStage] = useState<string>("pre_seed");
+  const [geo, setGeo] = useState("");
+  const [arr, setArr] = useState<string>("");
+  const [growthRate, setGrowthRate] = useState<string>("");
+  const [customers, setCustomers] = useState<string>("");
+
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+
+  function computeProfileCompleteness() {
+    const required: { key: string; label: string; filled: boolean }[] = [
+      { key: "name", label: "Company name", filled: !!name.trim() },
+      { key: "sector", label: "Sector", filled: !!sector },
+      { key: "stage", label: "Stage", filled: !!stage },
+      { key: "geo", label: "Geography", filled: !!geo.trim() },
+    ];
+
+    const optional: { key: string; filled: boolean }[] = [
+      { key: "arr", filled: !!arr.trim() },
+      { key: "growthRate", filled: !!growthRate.trim() },
+      { key: "customers", filled: !!customers.trim() },
+    ];
+
+    const requiredFilled = required.filter((f) => f.filled).length;
+    const requiredTotal = required.length;
+    const optionalFilled = optional.filter((f) => f.filled).length;
+    const optionalTotal = optional.length;
+
+    const requiredScore = requiredTotal === 0 ? 0 : (requiredFilled / requiredTotal) * 70;
+    const optionalScore = optionalTotal === 0 ? 0 : (optionalFilled / optionalTotal) * 30;
+
+    const completeness = Math.round(requiredScore + optionalScore);
+    const missingRequired = required.filter((f) => !f.filled).map((f) => f.label);
+
+    return {
+      completeness,
+      missingFields: missingRequired,
+    };
+  }
+
+  const { completeness: strength, missingFields: missing } = computeProfileCompleteness();
 
   useEffect(() => {
-    loadDNA();
-  }, [loadDNA]);
+    if (!user?.uid) return;
+    let cancelled = false;
+
+    const load = async () => {
+      setLoadError(null);
+      try {
+        const existing = await fetchCompanyDNA(user.uid);
+        if (!cancelled && existing) {
+          setProfile(existing);
+          setName(existing.name ?? "");
+          setSector(existing.sector ?? "general");
+          setStage(existing.stage ?? "pre_seed");
+          setGeo(existing.geo ?? "");
+          setArr((existing as any).arr ?? (existing as any).metrics?.mrr ?? "");
+          setGrowthRate((existing as any).growthRate ?? (existing as any).metrics?.growthRate ?? "");
+          setCustomers((existing as any).customers ?? (existing as any).metrics?.users ?? "");
+        }
+      } catch (err) {
+        console.error("Failed to load Company DNA profile", err);
+        if (!cancelled) {
+          setLoadError("We could not load your existing Company DNA profile.");
+        }
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid]);
+
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!user?.uid) return;
+    setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(null);
+
+    try {
+      const { completeness, missingFields } = computeProfileCompleteness();
+      const now = Timestamp.now();
+
+      const id = profile?.id ?? user.uid;
+      const docRef = doc(companyDnaCollection, id);
+
+      const payload: any = {
+        id,
+        owner_uid: user.uid,
+        name: name.trim() || "Untitled Company",
+        sector,
+        stage,
+        geo: geo.trim(),
+        profile_completeness: completeness,
+        missing_fields: missingFields,
+        updated_at: now,
+        arr: arr.trim() || undefined,
+        growthRate: growthRate.trim() || undefined,
+        customers: customers.trim() || undefined,
+        full_dna: dna
+      };
+
+      await setDoc(docRef, payload, { merge: true });
+      setProfile(payload);
+      setSaveSuccess("Company DNA saved.");
+    } catch (err) {
+      console.error("Failed to save Company DNA", err);
+      setSaveError("We could not save your Company DNA. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="max-w-4xl mx-auto pb-32">
       
+      <form onSubmit={handleSave}>
+      {loadError && (
+        <div className="mb-6 p-4 rounded-xl bg-crimson-alert/10 border border-crimson-alert/20 text-crimson-alert text-sm">
+          {loadError}
+        </div>
+      )}
+      {saveError && (
+        <div className="mb-6 p-4 rounded-xl bg-crimson-alert/10 border border-crimson-alert/20 text-crimson-alert text-sm">
+          {saveError}
+        </div>
+      )}
+      {saveSuccess && (
+        <div className="mb-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-sm">
+          {saveSuccess}
+        </div>
+      )}
+      
       {/* Header */}
-      <div className="mb-10">
-        <h1 style={{ fontFamily: typography.fonts.interface, fontWeight: 600, fontSize: typography.scale.h2.fontSize, color: colors.primary.obsidian, letterSpacing: typography.scale.h2.letterSpacing }}>
-          Company DNA
-        </h1>
-        <p className="text-slate-500 mt-2 text-[15px] max-w-2xl">
-          Tell IdealApp about your company once. Every document you create — deck, memo, financial model — is pre-populated with your context. The AI remembers everything.
-        </p>
+      <div className="mb-10 flex items-start justify-between">
+        <div>
+          <h1 style={{ fontFamily: typography.fonts.interface, fontWeight: 600, fontSize: typography.scale.h2.fontSize, color: colors.primary.obsidian, letterSpacing: typography.scale.h2.letterSpacing }}>
+            Company DNA
+          </h1>
+          <p className="text-slate-500 mt-2 text-[15px] max-w-2xl">
+            Tell IdealApp about your company once. Every document you create — deck, memo, financial model — is pre-populated with your context. The AI remembers everything.
+          </p>
+        </div>
+        <button 
+          type="submit"
+          disabled={saving || !!loadError}
+          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {saving ? 'Saving...' : 'Save Profile'}
+        </button>
       </div>
 
       {/* Strength Meter (Sticky) */}
@@ -39,13 +188,12 @@ export const CompanyDNAEditor: React.FC = () => {
         </div>
         <div className="flex flex-col gap-1 min-w-[240px]">
           <div className="flex items-center gap-2 text-[12px] font-medium text-slate-600">
-            <CheckCircle2 size={14} className="text-emerald-500"/> Personalised pitch deck
+             {missing.length === 0 ? <CheckCircle2 size={14} className="text-emerald-500"/> : <ShieldAlert size={14} className="text-amber-500"/>} 
+             Core Profile ({missing.length === 0 ? 'Complete' : `Missing ${missing.length}`})
           </div>
           <div className="flex items-center gap-2 text-[12px] font-medium text-slate-600">
-            <CheckCircle2 size={14} className="text-emerald-500"/> Accurate financial model
-          </div>
-          <div className="flex items-center gap-2 text-[12px] font-medium text-slate-400">
-            <ShieldAlert size={14} className="text-amber-500"/> Investor-matched intro email (Add metrics)
+             {arr || growthRate || customers ? <CheckCircle2 size={14} className="text-emerald-500"/> : <ShieldAlert size={14} className="text-slate-300"/>} 
+             Financial Metrics
           </div>
         </div>
       </div>
@@ -55,12 +203,12 @@ export const CompanyDNAEditor: React.FC = () => {
         
         <Section title="1. Company Identity">
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Company Name" value={dna.identity.name} onChange={(v) => updateDNA('identity', { name: v })} />
+            <Input label="Company Name" value={name} onChange={setName} />
             <Input label="Website" value={dna.identity.website} onChange={(v) => updateDNA('identity', { website: v })} />
-            <Input label="One-word Tagline / Sector" value={dna.identity.tagline} onChange={(v) => updateDNA('identity', { tagline: v })} />
+            <Input label="One-word Tagline / Sector" value={sector} onChange={setSector} />
             <div className="grid grid-cols-2 gap-4">
               <Input label="Founding Year" value={dna.identity.foundingYear} onChange={(v) => updateDNA('identity', { foundingYear: v })} />
-              <Input label="HQ Location" value={dna.identity.hq} onChange={(v) => updateDNA('identity', { hq: v })} />
+              <Input label="HQ Location" value={geo} onChange={setGeo} />
             </div>
           </div>
         </Section>
@@ -72,16 +220,16 @@ export const CompanyDNAEditor: React.FC = () => {
 
         <Section title="3. Traction & Metrics">
           <div className="grid grid-cols-3 gap-4 mb-4">
-            <MetricInput label="MRR / ARR" value={dna.traction.mrr} onChange={(v) => updateDNA('traction', { mrr: v })} />
-            <MetricInput label="Users / Customers" value={dna.traction.users} onChange={(v) => updateDNA('traction', { users: v })} />
-            <MetricInput label="Growth Rate" value={dna.traction.growthRate} onChange={(v) => updateDNA('traction', { growthRate: v })} />
+            <MetricInput label="MRR / ARR" value={arr} onChange={setArr} />
+            <MetricInput label="Users / Customers" value={customers} onChange={setCustomers} />
+            <MetricInput label="Growth Rate" value={growthRate} onChange={setGrowthRate} />
           </div>
           <Input label="Key Milestones (Comma separated)" value={dna.traction.milestones} onChange={(v) => updateDNA('traction', { milestones: v })} />
         </Section>
 
         <Section title="4. Fundraising">
           <div className="grid grid-cols-2 gap-4 mb-4">
-            <Input label="Current Stage (e.g. Pre-seed, Seed)" value={dna.fundraising.stage} onChange={(v) => updateDNA('fundraising', { stage: v })} />
+            <Input label="Current Stage (e.g. Pre-seed, Seed)" value={stage} onChange={setStage} />
             <MetricInput label="Amount Raising" value={dna.fundraising.amountRaising} onChange={(v) => updateDNA('fundraising', { amountRaising: v })} />
           </div>
           <Input label="Use of Funds" value={dna.fundraising.useOfFunds} onChange={(v) => updateDNA('fundraising', { useOfFunds: v })} />
@@ -99,6 +247,7 @@ export const CompanyDNAEditor: React.FC = () => {
         </Section>
 
       </div>
+      </form>
     </div>
   );
 };

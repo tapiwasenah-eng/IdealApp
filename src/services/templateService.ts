@@ -10,41 +10,31 @@ import {
   runTransaction
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import type { TemplateDoc } from '../store';
 
-export interface TemplateData {
-  id?: string;
-  title: string;
-  description: string;
-  type: string;
-  sectionsSchema: any[];
-  defaultCanvasJSON: string;
-  version: number;
-  createdAt?: any;
-  updatedAt?: any;
-}
-
-export const getTemplates = async (): Promise<TemplateData[]> => {
+export const getTemplates = async (): Promise<TemplateDoc[]> => {
   const q = query(collection(db, 'templates'));
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({
     id: doc.id,
     ...doc.data()
-  } as TemplateData));
+  } as TemplateDoc));
 };
 
-export const getTemplateById = async (templateId: string): Promise<TemplateData | null> => {
+export const getTemplateById = async (templateId: string): Promise<TemplateDoc | null> => {
   const docRef = doc(db, 'templates', templateId);
   const snap = await getDoc(docRef);
   if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as TemplateData;
+  return { id: snap.id, ...snap.data() } as TemplateDoc;
 };
 
-export const createTemplate = async (data: Omit<TemplateData, 'id'>) => {
+export const createTemplate = async (data: Omit<TemplateDoc, 'id'>) => {
   const colRef = collection(db, 'templates');
   const docRef = await addDoc(colRef, {
     ...data,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+    created_at: serverTimestamp(),
+    updated_at: serverTimestamp(),
   });
   return docRef.id;
 };
+

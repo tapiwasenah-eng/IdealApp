@@ -2,9 +2,73 @@ import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import type { User } from 'firebase/auth';
 import type { GeneratedDocument } from '../services/documentGenerator';
-import type { Document, Template } from '../types';
+import type { Document as CanvasDocument, Template } from '../types';
 
-// ─── Domain Types ────────────────────────────────────────────────────────────
+// ─── Canonical Workspace Types ───────────────────────────────────────────────
+
+// This Section shape must match what DocumentPage.tsx and the Data Room viewer
+// expect for workspace documents stored at users/{uid}/documents/{id}.
+export type SectionAIState = 'idle' | 'generating' | 'generated';
+
+export interface Section {
+  id: string;
+  title: string;
+  content: string;
+  ai_state: SectionAIState;
+}
+
+export interface DocumentDoc {
+  id: string;
+  name: string;
+  document_type: string; // e.g. 'pitch_deck', 'financial_model'
+  status: string; // 'draft', 'published', etc.
+  sections: Section[];
+}
+
+// Canonical template type used by TemplatesPage & CommunityTemplatesGallery.
+// Firestore fields are snake_case to match your current templates collection.
+export type TemplateComplexity = 'light' | 'standard' | 'advanced';
+
+export interface TemplateDoc {
+  id?: string;
+  // Display name
+  name: string;
+  description?: string; // Optional description
+  
+  // Metadata used for filtering and display
+  document_type: string; // 'pitch_deck', 'financial_model', etc.
+  category: string; // e.g. 'Pitch Decks'
+  sector: string; // primary sector label
+  sector_tags: string[]; // additional sector tags
+  stage: string; // 'seed', 'series_a', 'all', etc.
+  stage_tags: string[];
+  complexity: TemplateComplexity;
+  is_premium: boolean;
+  is_community: boolean;
+
+  // Ownership & analytics
+  created_by?: string;
+  rating?: number;
+  page_count?: number;
+
+  // Template sections schema (blueprint for workspace sections)
+  sections_schema: Array<{
+    id?: string;
+    type?: string;
+    heading?: string;
+    subheading?: string;
+    body?: string;
+    bullets?: string[];
+    metrics?: any[];
+    tableData?: any;
+  }>;
+
+  version: number;
+  created_at?: any;
+  updated_at?: any;
+}
+
+// ─── Domain Types (Canvas & App Shell) ───────────────────────────────────────
 
 export interface Workspace {
   id: string;
@@ -24,8 +88,6 @@ export interface TemplateFilters {
   designStyle: string[];
 }
 
-// ─── Slice Interfaces ─────────────────────────────────────────────────────────
-
 export interface UserProfile {
   uid: string;
   email: string;
@@ -38,6 +100,8 @@ export interface UserProfile {
   createdAt: Date | null;
 }
 
+// ─── Slice Interfaces ────────────────────────────────────────────────────────
+
 interface AuthSlice {
   user: User | null;
   userProfile: UserProfile | null;
@@ -48,14 +112,14 @@ interface AuthSlice {
 }
 
 interface DocumentSlice {
-  documents: Document[];
-  activeDocument: Document | null;
+  documents: CanvasDocument[];
+  activeDocument: CanvasDocument | null;
   generatedContent: GeneratedDocument | null;
   isGenerating: boolean;
   generationError: string | null;
   preferredModel: 'claude' | 'gemini' | 'auto';
-  setDocuments: (documents: Document[]) => void;
-  setActiveDocument: (document: Document | null) => void;
+  setDocuments: (documents: CanvasDocument[]) => void;
+  setActiveDocument: (document: CanvasDocument | null) => void;
   setGeneratedContent: (content: GeneratedDocument | null) => void;
   setIsGenerating: (isGenerating: boolean) => void;
   setGenerationError: (error: string | null) => void;
@@ -112,14 +176,6 @@ interface WorkspaceSlice {
   setActiveWorkspaceId: (id: string | null) => void;
 }
 
-type StoreState = AuthSlice &
-  DocumentSlice &
-  CanvasSlice &
-  TemplateSlice &
-  UISlice &
-  WorkspaceSlice &
-  TemplateEditorSlice;
-
 interface TemplateEditorSlice {
   templateFieldValues: Record<string, string>;
   activeTemplateId: string | null;
@@ -128,7 +184,83 @@ interface TemplateEditorSlice {
   updateFieldValue: (fieldName: string, value: string) => void;
 }
 
-// ─── Store ────────────────────────────────────────────────────────────────────
+// Workspace document store slice (Docs Space / DocumentPage)
+export interface DocumentHistoryEntry {
+  documentId: string;
+  sections: Section[];
+  timestamp: number;
+}
+
+interface WorkspaceDocumentSlice {
+  // Current workspace document
+  workspaceDocument: DocumentDoc | null;
+  workspaceSections: Section[];
+  workspaceHistory: DocumentHistoryEntry[];
+  workspaceLoading: boolean;
+  workspaceError: string | null;
+
+  setWorkspaceDocument: (doc: DocumentDoc | null) => void;
+  setWorkspaceSections: (sections: Section[]) => void;
+  updateWorkspaceSectionContent: (sectionId: string, content: string) => void;
+  updateWorkspaceSectionAIState: (sectionId: string, aiState: SectionAIState) => void;
+  addWorkspaceHistoryEntry: () => void;
+  undoWorkspaceAction: (documentId: string) => void;
+  setWorkspaceLoading: (loading: boolean) => void;
+  setWorkspaceError: (error: string | null) => void;
+  normalizeSections: (rawSections: any[]) => Section[];
+}
+
+type StoreState = AuthSlice &
+  DocumentSlice &
+  CanvasSlice &
+  TemplateSlice &
+  UISlice &
+  WorkspaceSlice &
+  TemplateEditorSlice &
+  WorkspaceDocumentSlice;
+
+// ─── Helpers: Section Normalization ──────────────────────────────────────────
+
+const normalizeRawSections = (rawSections: any[]): Section[] => {
+  if (!Array.isArray(rawSections)) {
+    return [];
+  }
+
+  return rawSections.map((raw, index) => {
+    const id: string =
+      typeof raw.id === 'string' && raw.id.trim().length > 0
+        ? raw.id
+        : `section-${index}`;
+
+    const title: string =
+      typeof raw.title === 'string' && raw.title.trim().length > 0
+        ? raw.title
+        : typeof raw.heading === 'string' && raw.heading.trim().length > 0
+        ? raw.heading
+        : `Section ${index + 1}`;
+
+    const content: string =
+      typeof raw.content === 'string'
+        ? raw.content
+        : typeof raw.body === 'string'
+        ? raw.body
+        : '';
+
+    const ai_state: SectionAIState =
+      raw.ai_state === 'generating' || raw.ai_state === 'generated'
+        ? raw.ai_state
+        : 'idle';
+
+    return {
+      id,
+      title,
+      content,
+      ai_state,
+    };
+  });
+};
+
+// ─── Store ───────────────────────────────────────────────────────────────────
 
 export const useStore = create<StoreState>()(
   devtools(
@@ -142,7 +274,7 @@ export const useStore = create<StoreState>()(
         setUserProfile: (userProfile) => set({ userProfile }, false, 'auth/setUserProfile'),
         setLoading: (loading) => set({ loading }, false, 'auth/setLoading'),
 
-        // ── Documents ─────────────────────────────────────────────────────────
+        // ── Documents (Canvas) ────────────────────────────────────────────────
         documents: [],
         activeDocument: null,
         generatedContent: null,
@@ -294,20 +426,203 @@ export const useStore = create<StoreState>()(
         templateFieldValues: {},
         activeTemplateId: null,
         setTemplateFieldValues: (values) =>
-          set({ templateFieldValues: values }, false, 'templateEditor/setTemplateFieldValues'),
+          set(
+            { templateFieldValues: values },
+            false,
+            'templateEditor/setTemplateFieldValues'
+          ),
         setActiveTemplateId: (id) =>
           set({ activeTemplateId: id }, false, 'templateEditor/setActiveTemplateId'),
         updateFieldValue: (fieldName, value) =>
-          set((state) => ({
-            templateFieldValues: {
-              ...state.templateFieldValues,
-              [fieldName]: value,
+          set(
+            (state) => ({
+              templateFieldValues: {
+                ...state.templateFieldValues,
+                [fieldName]: value,
+              },
+            }),
+            false,
+            'templateEditor/updateFieldValue'
+          ),
+
+        // ── Workspace Document Slice (Docs Space) ────────────────────────────
+        workspaceDocument: null,
+        workspaceSections: [],
+        workspaceHistory: [],
+        workspaceLoading: false,
+        workspaceError: null,
+
+        setWorkspaceDocument: (doc: DocumentDoc | null) => {
+          if (!doc) {
+            set(
+              {
+                workspaceDocument: null,
+                workspaceSections: [],
+                workspaceHistory: [],
+                workspaceError: null,
+              },
+              false,
+              'workspace/setWorkspaceDocument(null)'
+            );
+            return;
+          }
+
+          const normalizedSections = normalizeRawSections(doc.sections || []);
+          set(
+            {
+              workspaceDocument: {
+                ...doc,
+                sections: normalizedSections,
+              },
+              workspaceSections: normalizedSections,
+              workspaceError: null,
             },
-          }), false, 'templateEditor/updateFieldValue'),
+            false,
+            'workspace/setWorkspaceDocument'
+          );
+        },
+
+        setWorkspaceSections: (sections: Section[]) => {
+          const state = get();
+          if (!state.workspaceDocument) {
+            return;
+          }
+          const normalized = normalizeRawSections(sections);
+          set(
+            {
+              workspaceSections: normalized,
+              workspaceDocument: {
+                ...state.workspaceDocument,
+                sections: normalized,
+              },
+            },
+            false,
+            'workspace/setWorkspaceSections'
+          );
+        },
+
+        updateWorkspaceSectionContent: (sectionId: string, content: string) => {
+          const state = get();
+          if (!state.workspaceDocument) {
+            return;
+          }
+
+          const updated = state.workspaceSections.map((section) =>
+            section.id === sectionId ? { ...section, content } : section
+          );
+
+          const now = Date.now();
+          set(
+            (prev) => ({
+              workspaceHistory: [
+                ...prev.workspaceHistory,
+                {
+                  documentId: state.workspaceDocument!.id,
+                  sections: prev.workspaceSections,
+                  timestamp: now,
+                },
+              ],
+              workspaceSections: updated,
+              workspaceDocument: {
+                ...state.workspaceDocument!,
+                sections: updated,
+              },
+            }),
+            false,
+            'workspace/updateSectionContent'
+          );
+        },
+
+        updateWorkspaceSectionAIState: (sectionId: string, aiState: SectionAIState) => {
+          const state = get();
+          if (!state.workspaceDocument) {
+            return;
+          }
+
+          const updated = state.workspaceSections.map((section) =>
+            section.id === sectionId ? { ...section, ai_state: aiState } : section
+          );
+
+          set(
+            {
+              workspaceSections: updated,
+              workspaceDocument: {
+                ...state.workspaceDocument,
+                sections: updated,
+              },
+            },
+            false,
+            'workspace/updateSectionAIState'
+          );
+        },
+
+        addWorkspaceHistoryEntry: () => {
+          const state = get();
+          if (!state.workspaceDocument) {
+            return;
+          }
+          const now = Date.now();
+          set(
+            (prev) => ({
+              workspaceHistory: [
+                ...prev.workspaceHistory,
+                {
+                  documentId: state.workspaceDocument!.id,
+                  sections: prev.workspaceSections,
+                  timestamp: now,
+                },
+              ],
+            }),
+            false,
+            'workspace/addHistoryEntry'
+          );
+        },
+
+        undoWorkspaceAction: (documentId: string) => {
+          const state = get();
+          if (!state.workspaceDocument || state.workspaceDocument.id !== documentId) {
+            return;
+          }
+          if (state.workspaceHistory.length === 0) {
+            return;
+          }
+
+          const historyCopy = [...state.workspaceHistory];
+          const last = historyCopy.pop();
+          if (!last) {
+            return;
+          }
+
+          const normalized = normalizeRawSections(last.sections);
+          set(
+            {
+              workspaceHistory: historyCopy,
+              workspaceSections: normalized,
+              workspaceDocument: {
+                ...state.workspaceDocument,
+                sections: normalized,
+              },
+            },
+            false,
+            'workspace/undoAction'
+          );
+        },
+
+        setWorkspaceLoading: (loading: boolean) => {
+          set({ workspaceLoading: loading }, false, 'workspace/setLoading');
+        },
+
+        setWorkspaceError: (error: string | null) => {
+          set({ workspaceError: error }, false, 'workspace/setError');
+        },
+
+        normalizeSections: (rawSections: any[]) => {
+          return normalizeRawSections(rawSections);
+        },
       }),
       {
-        name: 'buildit-store',
-        partialize: (state) => ({ 
+        name: 'idealapp-store',
+        partialize: (state) => ({
           activeWorkspaceId: state.activeWorkspaceId,
           guestCredits: state.guestCredits,
           guestUsageCount: state.guestUsageCount,
@@ -317,6 +632,6 @@ export const useStore = create<StoreState>()(
         }),
       }
     ),
-    { name: 'BuiltIt Store' }
+    { name: 'IdealApp Store' }
   )
 );

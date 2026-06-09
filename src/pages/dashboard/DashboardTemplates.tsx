@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useDocumentStore } from '../../lib/store/useDocumentStore';
+import { createWorkspaceFromTemplate, inferRenderMode } from '../../lib/documents';
+import { useStore } from '../../store';
 import { designSystem } from '../../lib/design-system';
 import { ChevronRight, Wand2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -8,18 +9,28 @@ import { TEMPLATES } from '../../data/templates';
 import { getTemplatePath } from '../../lib/routing';
 
 export const DashboardTemplates: React.FC = () => {
-  const { createDocumentFromTemplate } = useDocumentStore();
   const { colors, typography, shadows } = designSystem;
   const navigate = useNavigate();
   // Provide some recommended templates from the static TEMPLATES array
   const templates = TEMPLATES.slice(0, 4); 
 
+  const user = useStore(state => state.user);
+  
   const handleUseTemplate = async (template: any) => {
+    if (!user) {
+      toast.error("Please sign in first");
+      return;
+    }
     try {
       toast.loading("Generating document...", { id: "gen-doc" });
-      const docId = await createDocumentFromTemplate(template.id, template);
+      const mode = inferRenderMode(template);
+      const res = await createWorkspaceFromTemplate({
+        userId: user.uid,
+        template,
+        mode,
+      });
       toast.success("Document created!", { id: "gen-doc", duration: 2000 });
-      navigate(`/documents/${docId}`);
+      navigate(res.route);
     } catch(err: any) {
       toast.error(err.message || "Failed to create document", { id: "gen-doc", duration: 3000 });
     }

@@ -22,8 +22,8 @@ export const WorkspaceNav: React.FC<WorkspaceNavProps> = ({
   collapsed = false,
 }) => {
   const { user } = useAuth();
-  const { workspaces, activeWorkspaceId, setActiveWorkspace } =
-    useWorkspaceStore();
+  const { activeWorkspace, setActiveWorkspace } = useWorkspaceStore();
+  const [workspaces, setWorkspaces] = useState<any[]>([]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newName, setNewName] = useState('');
@@ -39,12 +39,12 @@ export const WorkspaceNav: React.FC<WorkspaceNavProps> = ({
     }
     setCreating(true);
     try {
-      const ws = await createWorkspace({
+      const ws: any = await createWorkspace({
         name,
         color: newColor,
         userId: user!.uid,
       });
-      setActiveWorkspace(ws.id);
+      setActiveWorkspace(ws as any);
       toast.success(`Workspace "${name}" created`);
       setShowCreateModal(false);
       setNewName('');
@@ -83,11 +83,11 @@ export const WorkspaceNav: React.FC<WorkspaceNavProps> = ({
             </p>
           )}
           {workspaces.map((ws) => {
-            const isActive = ws.id === activeWorkspaceId;
+            const isActive = ws.id === activeWorkspace?.id;
             return (
               <button
                 key={ws.id}
-                onClick={() => setActiveWorkspace(ws.id)}
+                onClick={() => setActiveWorkspace(ws)}
                 className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-sm transition-colors ${
                   isActive
                     ? 'bg-[#EFF6FF] text-[#1D4ED8] font-medium'

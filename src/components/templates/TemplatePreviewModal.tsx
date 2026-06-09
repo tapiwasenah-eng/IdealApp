@@ -116,22 +116,26 @@ export default function TemplatePreviewModal({
 
     setLoading(true)
     try {
-      const docRef = await addDoc(collection(db, 'documents'), {
-        title: `${template.title} (Copy)`,
-        templateId: template.id,
-        templateTitle: template.title,
-        category: template.category,
-        content: '',
+      const { createWorkspaceFromTemplate, inferRenderMode } = await import('../../lib/services/documents')
+      const result = await createWorkspaceFromTemplate({
         userId: user.uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        template: {
+          ...template,
+          name: `${template.title} (Copy)`,
+          document_type: template.category,
+        },
+        mode: inferRenderMode(template)
       })
       toast.success('Document created from template!')
       onClose()
-      navigate(`/editor/${docRef.id}`)
-    } catch (err) {
+      navigate(result.route)
+    } catch (err: any) {
       console.error(err)
-      toast.error('Failed to create document. Please try again.')
+      if (err.message?.includes('FREEMIUM_LIMIT')) {
+        toast.error('You have reached the maximum of 5 free workspaces. Please upgrade to Pro.')
+      } else {
+        toast.error('Failed to create document. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
